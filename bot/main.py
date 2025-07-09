@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart
 from aiogram import F
 import asyncio
 from dotenv import load_dotenv
-from bot.handlers import save_document
+from bot.handlers import save_document, process_document, save_to_database, format_response
 
 load_dotenv()
 
@@ -20,8 +20,24 @@ async def cmd_start(message: Message):
 
 @dp.message(F.document)
 async def handle_document(message: Message):
-    local_path = await save_document(message)
-    await message.answer(f"Документ сохранён: {os.path.basename(local_path)}\n(Дальнейшая обработка в разработке)")
+    try:
+        # Сохраняем документ
+        local_path = await save_document(message)
+        await message.answer("📄 Обрабатываю документ...")
+        
+        # Полная обработка документа
+        result = await process_document(local_path)
+        
+        # Сохраняем в базу данных
+        await save_to_database(result)
+        
+        # Формируем и отправляем ответ
+        response = format_response(result)
+        await message.answer(response)
+        
+    except Exception as e:
+        await message.answer(f"❌ Ошибка при обработке документа: {str(e)}")
+        print(f"Ошибка: {e}")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot)) 

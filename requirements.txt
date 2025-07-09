@@ -5,4 +5,5 @@ pytesseract
 python-docx
 openpyxl
 peewee
-python-dotenv 
+python-dotenv
+Pillow 
