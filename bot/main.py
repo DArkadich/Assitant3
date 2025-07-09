@@ -5,6 +5,7 @@ from aiogram.filters import CommandStart
 from aiogram import F
 import asyncio
 from dotenv import load_dotenv
+from bot.handlers import save_document
 
 load_dotenv()
 
@@ -19,7 +20,8 @@ async def cmd_start(message: Message):
 
 @dp.message(F.document)
 async def handle_document(message: Message):
-    await message.answer("Документ получен! (Обработка в разработке)")
+    local_path = await save_document(message)
+    await message.answer(f"Документ сохранён: {os.path.basename(local_path)}\n(Дальнейшая обработка в разработке)")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot)) 
