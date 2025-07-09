@@ -61,7 +61,7 @@ def extract_document_number(text: str) -> str:
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match:
+        if match and match.groups():
             return match.group(1)
     
     return ""
@@ -77,7 +77,7 @@ def extract_date(text: str) -> str:
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match:
+        if match and match.groups():
             return match.group(1)
     
     return "" 

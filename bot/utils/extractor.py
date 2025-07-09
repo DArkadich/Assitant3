@@ -15,7 +15,7 @@ def extract_amount(text: str) -> Optional[float]:
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match:
+        if match and match.groups():
             amount_str = match.group(1).replace(' ', '')
             try:
                 return float(amount_str)
@@ -35,7 +35,7 @@ def extract_inn(text: str) -> str:
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match:
+        if match and match.groups():
             inn = match.group(1)
             # Проверяем, что это действительно ИНН (10 или 12 цифр)
             if len(inn) in [10, 12]:
@@ -58,7 +58,7 @@ def extract_company_name(text: str) -> str:
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
-        if match:
+        if match and match.groups():
             company = match.group(1).strip()
             # Очищаем от лишних символов
             company = re.sub(r'\s+', ' ', company)
