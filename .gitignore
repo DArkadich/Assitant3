@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Env
+.env
+
+# SQLite
+*.sqlite3
+database/
+!database/.gitkeep
+
+# Документы
+/data/
+!data/Документы/.gitkeep
+
+# VSCode/Cursor
+.vscode/
+
+# Docker
+*.log
+
+# System
+.DS_Store 
