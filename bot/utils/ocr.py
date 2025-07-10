@@ -4,15 +4,21 @@ import fitz  # PyMuPDF
 import os
 from typing import Optional
 
-def extract_text_from_pdf(pdf_path: str) -> str:
-    """Извлекает текст из PDF файла"""
+def extract_text_from_pdf(pdf_path: str, debug: bool = True) -> str:
+    """Извлекает текст из PDF файла и сохраняет для отладки"""
     try:
         doc = fitz.open(pdf_path)
         text = ""
         for page in doc:
             text += page.get_text()
         doc.close()
-        return text.strip()
+        text = text.strip()
+        # Сохраняем текст для отладки
+        if debug:
+            txt_path = pdf_path + ".txt"
+            with open(txt_path, "w", encoding="utf-8") as f:
+                f.write(text)
+        return text
     except Exception as e:
         print(f"Ошибка при извлечении текста из PDF: {e}")
         return ""
@@ -33,13 +39,13 @@ def needs_ocr(text: str) -> bool:
         return True
     return False
 
-def extract_text_with_ocr(file_path: str) -> str:
-    """Извлекает текст из файла с OCR при необходимости"""
+def extract_text_with_ocr(file_path: str, debug: bool = True) -> str:
+    """Извлекает текст из файла с OCR при необходимости и сохраняет для отладки"""
     file_ext = os.path.splitext(file_path)[1].lower()
     
     if file_ext == '.pdf':
         # Сначала пробуем извлечь текст напрямую
-        text = extract_text_from_pdf(file_path)
+        text = extract_text_from_pdf(file_path, debug=debug)
         
         # Если текст пустой или мало символов - делаем OCR
         if needs_ocr(text):

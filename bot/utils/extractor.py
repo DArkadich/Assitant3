@@ -5,18 +5,18 @@ def extract_amount(text: str) -> Optional[float]:
     """Извлекает сумму из текста документа"""
     # Паттерны для поиска сумм
     patterns = [
-        r'сумма[:\s]*([\d\s]+)[\s]*руб',  # сумма: 55 000 руб
-        r'итого[:\s]*([\d\s]+)[\s]*руб',   # итого: 55 000 руб
-        r'к оплате[:\s]*([\d\s]+)[\s]*руб', # к оплате: 55 000 руб
-        r'([\d\s]+)[\s]*рублей',            # 55 000 рублей
-        r'([\d\s]+)[\s]*₽',                 # 55 000 ₽
-        r'([\d\s]+)[\s]*руб',               # 55 000 руб
+        r'сумма[:\s]*([\d\s.,]+)[\s]*руб',  # сумма: 1 570 134,00 руб
+        r'итого[:\s]*([\d\s.,]+)[\s]*руб',   # итого: 1 570 134,00 руб
+        r'к оплате[:\s]*([\d\s.,]+)[\s]*руб', # к оплате: 1 570 134,00 руб
+        r'([\d\s.,]+)[\s]*рублей',            # 1 570 134,00 рублей
+        r'([\d\s.,]+)[\s]*₽',                 # 1 570 134,00 ₽
+        r'([\d\s.,]+)[\s]*руб',               # 1 570 134,00 руб
     ]
     
     for pattern in patterns:
         match = re.search(pattern, text, re.IGNORECASE)
         if match and match.groups():
-            amount_str = match.group(1).replace(' ', '')
+            amount_str = match.group(1).replace(' ', '').replace(',', '.').replace(' ', '')
             try:
                 return float(amount_str)
             except ValueError:
