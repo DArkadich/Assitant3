@@ -7,3 +7,4 @@ openpyxl
 peewee
 python-dotenv
 Pillow 
+requests 
