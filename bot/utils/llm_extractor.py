@@ -31,6 +31,7 @@ def extract_receipts_llm(doc_text: str, timeout: int = 60) -> dict:
         data = response.json()
         # Ollama возвращает ответ в поле 'response'
         llm_text = data.get('response', '').strip()
+        print("LLM raw response:", llm_text)
         # Ищем JSON в ответе
         json_start = llm_text.find('{')
         json_end = llm_text.rfind('}') + 1
