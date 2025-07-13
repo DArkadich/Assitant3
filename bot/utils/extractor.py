@@ -5,14 +5,17 @@ def extract_amount(text: str) -> Optional[float]:
     """Извлекает сумму из текста документа"""
     # Паттерны для поиска сумм (приоритет: сумма услуги, затем итого)
     patterns = [
-        r'Сумма услуги \(руб\.\)\s*\n\s*([\d\s.,]+)',  # Сумма услуги (руб.) 1 570 134,00
-        r'сумма услуги[:\s]*([\d\s.,]+)[\s]*руб',  # сумма услуги: 1 570 134,00 руб
-        r'сумма[:\s]*([\d\s.,]+)[\s]*руб',  # сумма: 55 000 руб
-        r'итого[:\s]*([\d\s.,]+)[\s]*руб',   # итого: 55 000 руб
-        r'к оплате[:\s]*([\d\s.,]+)[\s]*руб', # к оплате: 55 000 руб
-        r'([\d\s.,]+)[\s]*рублей',            # 55 000 рублей
-        r'([\d\s.,]+)[\s]*₽',                 # 55 000 ₽
-        r'([\d\s.,]+)[\s]*руб',               # 55 000 руб
+        r'Сумма услуги \(руб\.\)[^\d\n]*\n\s*([\d\s.,]+)',
+        r'Итого:[^\d\n]*\n\s*([\d\s.,]+)',
+        r'Сумма услуги \(руб\.\)\s*\n\s*([\d\s.,]+)\s*\n\s*[\d\s.,]+\s*USD',
+        r'Сумма услуги \(руб\.\)\s*\n\s*([\d\s.,]+)',
+        r'сумма услуги[:\s]*([\d\s.,]+)[\s]*руб',
+        r'итого[:\s]*([\d\s.,]+)[\s]*руб',
+        r'к оплате[:\s]*([\d\s.,]+)[\s]*руб',
+        r'сумма[:\s]*([\d\s.,]+)[\s]*руб',
+        r'([\d\s.,]+)[\s]*рублей',
+        r'([\d\s.,]+)[\s]*₽',
+        r'([\d\s.,]+)[\s]*руб',
     ]
     
     for pattern in patterns:
@@ -20,10 +23,23 @@ def extract_amount(text: str) -> Optional[float]:
         if match and match.groups():
             amount_str = match.group(1).replace(' ', '').replace(',', '.').replace(' ', '')
             try:
-                return float(amount_str)
+                amount = float(amount_str)
+                if amount > 100:
+                    return amount
             except ValueError:
                 continue
-    
+    # Если не нашли — ищем строку 'Итого:' и берём следующую строку
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if 'Итого:' in line and i+1 < len(lines):
+            next_line = lines[i+1].strip()
+            amount_str = next_line.replace(' ', '').replace(',', '.').replace(' ', '')
+            try:
+                amount = float(amount_str)
+                if amount > 100:
+                    return amount
+            except ValueError:
+                continue
     return None
 
 def extract_inn(text: str) -> str:
@@ -51,6 +67,7 @@ def extract_company_name(text: str) -> str:
     patterns = [
         r'Общество с ограниченной ответственностью "([^"]+)"',  # ООО "А7-АГЕНТ"
         r'ООО\s+[""]([^""]+)[""]',  # ООО "Название"
+        r'ООО\s+"([^"]+)"',  # ООО "Название" (с обычными кавычками)
         r'поставщик[:\s]*([А-ЯЁ][А-ЯЁ\s\d\-\"\"\']+)',  # поставщик: ООО "Рога и Копыта"
         r'продавец[:\s]*([А-ЯЁ][А-ЯЁ\s\d\-\"\"\']+)',   # продавец: ООО "Рога и Копыта"
         r'заказчик[:\s]*([А-ЯЁ][А-ЯЁ\s\d\-\"\"\']+)',   # заказчик: ООО "Рога и Копыта"
