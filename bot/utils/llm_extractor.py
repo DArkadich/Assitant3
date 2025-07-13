@@ -1,7 +1,7 @@
 import requests
 import json
 
-OLLAMA_HOST = 'http://localhost:11434'
+OLLAMA_HOST = 'http://localhost:11434'  # Ollama в том же контейнере
 OLLAMA_MODEL = 'mistral'
 
 PROMPT_TEMPLATE = '''Вот текст документа:
