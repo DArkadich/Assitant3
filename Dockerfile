@@ -17,6 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Создаем скрипт запуска
-RUN echo '#!/bin/bash\nollama serve &\nsleep 10\nollama pull mistral &\nsleep 5\npython -m bot.main' > /app/start.sh && chmod +x /app/start.sh
+RUN echo '#!/bin/bash\nollama serve &\nsleep 10\nollama pull llama2 &\nsleep 5\npython -m bot.main' > /app/start.sh && chmod +x /app/start.sh
 
 CMD ["/app/start.sh"] 
