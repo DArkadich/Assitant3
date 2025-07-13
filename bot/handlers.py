@@ -12,9 +12,6 @@ from bot.utils.extractor import extract_all_receipts
 from bot.utils.storage import get_target_folder, generate_filename, move_document_to_folder
 from bot.utils.db import get_db
 from models.document import Document
-print("Importing LLM extractor...")
-from bot.utils.llm_extractor import extract_receipts_llm
-print("LLM extractor imported successfully")
 
 load_dotenv()
 
@@ -36,7 +33,7 @@ async def save_document(message: Message) -> str:
     return local_path
 
 async def process_document(file_path: str) -> Dict:
-    """Полная обработка документа с LLM и fallback на регулярки"""
+    """Полная обработка документа с использованием только regex-извлечения"""
     print("process_document: Starting with file:", file_path)
     
     # 1. Извлекаем текст (с OCR при необходимости)
@@ -49,15 +46,10 @@ async def process_document(file_path: str) -> Dict:
     doc_type = classify_document(text)
     print("process_document: Document type:", doc_type)
     
-    # 3. Пробуем извлечь реквизиты через LLM
-    print("process_document: Trying LLM extraction...")
-    receipts = extract_receipts_llm(text)
-    print("process_document: LLM result:", receipts)
-    if not receipts or not receipts.get('number'):
-        # Fallback на регулярки
-        print("process_document: Using regex fallback...")
-        receipts = extract_all_receipts(text)
-        print("process_document: Regex result:", receipts)
+    # 3. Извлекаем реквизиты через regex
+    print("process_document: Extracting with regex...")
+    receipts = extract_all_receipts(text)
+    print("process_document: Regex result:", receipts)
     
     # 4. Определяем целевую папку
     print("process_document: Determining target folder...")
@@ -75,7 +67,7 @@ async def process_document(file_path: str) -> Dict:
     new_filename = generate_filename(
         original_name=os.path.basename(file_path),
         doc_type=doc_type,
-        doc_number=receipts.get('number', receipts.get('document_number', '')),
+        doc_number=receipts.get('document_number', ''),
         amount=receipts.get('amount'),
         date=receipts.get('date', '')
     )
