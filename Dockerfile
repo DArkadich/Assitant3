@@ -16,8 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Скачиваем модель Mistral при сборке
-RUN ollama pull mistral
+# Создаем скрипт запуска
+RUN echo '#!/bin/bash\nollama serve &\nsleep 10\nollama pull mistral &\nsleep 5\npython -m bot.main' > /app/start.sh && chmod +x /app/start.sh
 
-# Запускаем Ollama в фоне и затем бота
-CMD ollama serve & sleep 5 && python -m bot.main 
+CMD ["/app/start.sh"] 
