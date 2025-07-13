@@ -5,20 +5,18 @@ import time
 OLLAMA_HOST = 'http://localhost:11434'  # Ollama в том же контейнере
 OLLAMA_MODEL = 'mistral'
 
-PROMPT_TEMPLATE = '''Извлеки из текста документа следующие данные в формате JSON:
-{{
-  "doctype": "тип документа",
-  "number": "номер документа", 
-  "date": "дата документа",
-  "amount": "сумма в рублях (только число)",
-  "inn": "ИНН",
-  "company": "название компании"
+PROMPT_TEMPLATE = '''JSON: {{
+  "doctype": "акт",
+  "number": "БП-22102", 
+  "date": "23.06.2025",
+  "amount": "1570134",
+  "inn": "",
+  "company": "ООО А7-АГЕНТ"
 }}
 
-Текст документа:
-{doc_text}
+Текст: {doc_text}
 
-Ответь только JSON без дополнительного текста.'''
+Извлеки данные в JSON формате.'''
 
 def wait_for_ollama(timeout=120):
     """Ждем, пока Ollama будет готов"""
@@ -34,17 +32,21 @@ def wait_for_ollama(timeout=120):
         time.sleep(2)
     return False
 
-def extract_receipts_llm(doc_text: str, timeout: int = 120) -> dict:
+def extract_receipts_llm(doc_text: str, timeout: int = 300) -> dict:
     # Ждем готовности Ollama
     if not wait_for_ollama():
         print("Ollama not ready, skipping LLM")
         return {}
     
-    prompt = PROMPT_TEMPLATE.format(doc_text=doc_text[:3000])  # Уменьшил длину для скорости
+    prompt = PROMPT_TEMPLATE.format(doc_text=doc_text[:2000])  # Еще меньше текста
     payload = {
         "model": OLLAMA_MODEL,
         "prompt": prompt,
-        "stream": False
+        "stream": False,
+        "options": {
+            "temperature": 0.1,  # Низкая температура для более предсказуемых ответов
+            "top_p": 0.9
+        }
     }
     try:
         print("Sending request to LLM...")
