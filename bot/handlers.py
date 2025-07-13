@@ -12,7 +12,9 @@ from bot.utils.extractor import extract_all_receipts
 from bot.utils.storage import get_target_folder, generate_filename, move_document_to_folder
 from bot.utils.db import get_db
 from models.document import Document
+print("Importing LLM extractor...")
 from bot.utils.llm_extractor import extract_receipts_llm
+print("LLM extractor imported successfully")
 
 load_dotenv()
 
@@ -40,9 +42,12 @@ async def process_document(file_path: str) -> Dict:
     
     # 2. Классифицируем документ
     doc_type = classify_document(text)
-    
+    print("Starting document processing...")
+
     # 3. Пробуем извлечь реквизиты через LLM
+    print("Calling LLM extractor...")
     receipts = extract_receipts_llm(text)
+    print("LLM extractor called, result:", receipts)
     if not receipts or not receipts.get('number'):
         # Fallback на регулярки
         receipts = extract_all_receipts(text)
