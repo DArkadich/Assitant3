@@ -20,13 +20,17 @@ async def cmd_start(message: Message):
 
 @dp.message(F.document)
 async def handle_document(message: Message):
+    print("Document received:", message.document.file_name)
     try:
         # Сохраняем документ
         local_path = await save_document(message)
+        print("Document saved to:", local_path)
         await message.answer("📄 Обрабатываю документ...")
         
         # Полная обработка документа
+        print("Starting document processing...")
         result = await process_document(local_path)
+        print("Document processing completed, result:", result)
         
         # Сохраняем в базу данных
         await save_to_database(result)
@@ -36,8 +40,8 @@ async def handle_document(message: Message):
         await message.answer(response)
         
     except Exception as e:
+        print(f"Error in handle_document: {e}")
         await message.answer(f"❌ Ошибка при обработке документа: {str(e)}")
-        print(f"Ошибка: {e}")
 
 if __name__ == "__main__":
     asyncio.run(dp.start_polling(bot)) 

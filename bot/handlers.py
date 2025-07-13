@@ -37,22 +37,30 @@ async def save_document(message: Message) -> str:
 
 async def process_document(file_path: str) -> Dict:
     """Полная обработка документа с LLM и fallback на регулярки"""
+    print("process_document: Starting with file:", file_path)
+    
     # 1. Извлекаем текст (с OCR при необходимости)
+    print("process_document: Extracting text...")
     text = extract_text_with_ocr(file_path)
+    print("process_document: Text extracted, length:", len(text))
     
     # 2. Классифицируем документ
+    print("process_document: Classifying document...")
     doc_type = classify_document(text)
-    print("Starting document processing...")
-
+    print("process_document: Document type:", doc_type)
+    
     # 3. Пробуем извлечь реквизиты через LLM
-    print("Calling LLM extractor...")
+    print("process_document: Trying LLM extraction...")
     receipts = extract_receipts_llm(text)
-    print("LLM extractor called, result:", receipts)
+    print("process_document: LLM result:", receipts)
     if not receipts or not receipts.get('number'):
         # Fallback на регулярки
+        print("process_document: Using regex fallback...")
         receipts = extract_all_receipts(text)
+        print("process_document: Regex result:", receipts)
     
     # 4. Определяем целевую папку
+    print("process_document: Determining target folder...")
     year = datetime.now().strftime("%Y")
     target_folder = get_target_folder(
         doc_type=doc_type,
@@ -60,8 +68,10 @@ async def process_document(file_path: str) -> Dict:
         base_path=DOCUMENTS_PATH,
         year=year
     )
+    print("process_document: Target folder:", target_folder)
     
     # 5. Генерируем новое имя файла
+    print("process_document: Generating filename...")
     new_filename = generate_filename(
         original_name=os.path.basename(file_path),
         doc_type=doc_type,
@@ -69,17 +79,22 @@ async def process_document(file_path: str) -> Dict:
         amount=receipts.get('amount'),
         date=receipts.get('date', '')
     )
+    print("process_document: New filename:", new_filename)
     
     # 6. Перемещаем файл в целевую папку
+    print("process_document: Moving file...")
     final_path = move_document_to_folder(file_path, target_folder, new_filename)
+    print("process_document: Final path:", final_path)
     
-    return {
+    result = {
         'doc_type': doc_type,
         'receipts': receipts,
         'target_folder': target_folder,
         'final_path': final_path,
         'text': text
     }
+    print("process_document: Final result:", result)
+    return result
 
 async def save_to_database(result: Dict) -> bool:
     """Сохраняет метаданные документа в базу данных"""
