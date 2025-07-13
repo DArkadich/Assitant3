@@ -1,10 +1,8 @@
 aiogram
 pdfplumber
-pymupdf
 pytesseract
 python-docx
 openpyxl
 peewee
 python-dotenv
 Pillow 
-requests 

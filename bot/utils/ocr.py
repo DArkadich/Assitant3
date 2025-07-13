@@ -1,17 +1,18 @@
 import pytesseract
 from PIL import Image
-import fitz  # PyMuPDF
+import pdfplumber
 import os
 from typing import Optional
 
 def extract_text_from_pdf(pdf_path: str, debug: bool = True) -> str:
     """Извлекает текст из PDF файла и сохраняет для отладки"""
     try:
-        doc = fitz.open(pdf_path)
-        text = ""
-        for page in doc:
-            text += page.get_text()
-        doc.close()
+        with pdfplumber.open(pdf_path) as pdf:
+            text = ""
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
         text = text.strip()
         # Сохраняем текст для отладки
         if debug:
