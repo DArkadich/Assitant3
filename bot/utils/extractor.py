@@ -1,6 +1,27 @@
 import re
 from typing import Dict, Optional
 
+def extract_invoice_number(text: str) -> str:
+    match = re.search(r'Счет на оплату №\s*([A-Za-zА-Яа-я0-9]+)', text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return ""
+
+def extract_invoice_date(text: str) -> str:
+    match = re.search(r'Счет на оплату №\s*[A-Za-zА-Яа-я0-9]+\s*от\s*([0-9]{2}\s[а-яА-Я]+\s[0-9]{4})', text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    match = re.search(r'от\s*([0-9]{2}\s[а-яА-Я]+\s[0-9]{4})', text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return ""
+
+def extract_invoice_supplier(text: str) -> str:
+    match = re.search(r'Поставщик[:\s]+([^\n,]+)', text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return ""
+
 def extract_amount(text: str) -> Optional[float]:
     """Извлекает сумму из текста документа"""
     # Паттерны для поиска сумм (приоритет: сумма услуги, затем итого)
@@ -88,6 +109,16 @@ def extract_company_name(text: str) -> str:
 
 def extract_all_receipts(text: str) -> Dict[str, any]:
     """Извлекает все реквизиты из текста документа"""
+    # Если это счёт, используем спец. функции
+    if re.search(r'счет на оплату', text, re.IGNORECASE):
+        return {
+            'amount': extract_amount(text),
+            'inn': extract_inn(text),
+            'company': extract_invoice_supplier(text),
+            'date': extract_invoice_date(text),
+            'document_number': extract_invoice_number(text),
+        }
+    # иначе — стандартные
     return {
         'amount': extract_amount(text),
         'inn': extract_inn(text),
