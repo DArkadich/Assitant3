@@ -113,21 +113,19 @@ def extract_company_name(text: str) -> str:
     return ""
 
 def extract_payment_parties(text: str):
-    # Извлекает плательщика, его ИНН, получателя, его ИНН
-    payer = ''
-    payer_inn = ''
-    receiver = ''
-    receiver_inn = ''
-    # Плательщик
-    m = re.search(r'ИНН\s*(\d{10,12})\s*\n\s*([^\n]+)', text, re.IGNORECASE)
-    if m:
-        payer_inn = m.group(1)
-        payer = m.group(2).strip()
-    # Получатель
-    m2 = re.search(r'ИНН\s*(\d{10,12})\s*\n\s*ООО\s*"([^"]+)"', text[m.end():] if m else text, re.IGNORECASE)
-    if m2:
-        receiver_inn = m2.group(1)
-        receiver = 'ООО "' + m2.group(2).strip() + '"'
+    lines = text.splitlines()
+    payer, payer_inn, receiver, receiver_inn = '', '', '', ''
+    my_inns = [c for c in MY_COMPANIES if c.isdigit()]
+    for i, line in enumerate(lines):
+        m = re.search(r'инн\s*(\d{10,12})', line, re.IGNORECASE)
+        if m:
+            inn = m.group(1)
+            if inn in my_inns and i+1 < len(lines):
+                payer_inn = inn
+                payer = lines[i+1].strip()
+            elif i+1 < len(lines):
+                receiver_inn = inn
+                receiver = lines[i+1].strip()
     return payer, payer_inn, receiver, receiver_inn
 
 def extract_payment_counterparty(text: str) -> str:
