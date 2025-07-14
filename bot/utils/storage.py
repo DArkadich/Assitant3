@@ -30,8 +30,8 @@ def get_target_folder(doc_type: str, company: str, base_path: str, year: str = N
     doc_type_key = doc_type.lower().replace('ё', 'е') if doc_type else ''
     folder_type = folders.get(doc_type_key, folders['прочее'])
 
-    # Для платёжных поручений добавляем подпапку direction
-    if doc_type_key == 'платежное поручение' and direction:
+    # Для платёжных поручений, счетов, актов, договоров добавляем подпапку direction
+    if doc_type_key in ['платежное поручение', 'счет', 'акт', 'договор'] and direction:
         folder_type = os.path.join(folder_type, direction)
 
     if company:
