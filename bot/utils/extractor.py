@@ -187,12 +187,32 @@ def extract_party_direction_and_counterparty(text: str):
             return "Входящие", parties.get(role, "")
     return "", ""
 
+def extract_invoice_number_and_date(text: str):
+    m = re.search(r'Счет[^\d]*(\d+)[^\d]+от\s*([0-9]{1,2}\s*[а-яА-Я]+\.?\s*\d{4})', text, re.IGNORECASE)
+    if m:
+        return m.group(1), m.group(2)
+    return "", ""
+
+def extract_invoice_parties(text: str):
+    my_inns = [c for c in MY_COMPANIES if c.isdigit()]
+    my_names = [c.lower() for c in MY_COMPANIES if not c.isdigit()]
+    m1 = re.search(r'Продавец:\s*([^\n,]+)', text)
+    m2 = re.search(r'Покупатель:\s*([^\n,]+)', text)
+    seller = m1.group(1).strip() if m1 else ""
+    buyer = m2.group(1).strip() if m2 else ""
+    # Определяем направление
+    if any(my in seller or my in seller.lower() for my in my_names) or any(my in seller for my in my_inns):
+        return "Исходящие", buyer
+    if any(my in buyer or my in buyer.lower() for my in my_names) or any(my in buyer for my in my_inns):
+        return "Входящие", seller
+    return "", ""
+
 def extract_all_receipts(text: str, doc_type: str = None) -> Dict[str, any]:
     if doc_type is None:
         from .classifier import classify_document
         doc_type = classify_document(text)
-    # Для актов, договоров, счетов — универсальная логика
-    if doc_type in ['акт', 'договор', 'счёт', 'счет']:
+    # Для актов, договоров — универсальная логика
+    if doc_type in ['акт', 'договор']:
         direction, counterparty = extract_party_direction_and_counterparty(text)
         return {
             'amount': extract_amount(text),
@@ -200,6 +220,18 @@ def extract_all_receipts(text: str, doc_type: str = None) -> Dict[str, any]:
             'company': counterparty,
             'date': extract_date(text),
             'document_number': extract_document_number(text),
+            'direction': direction,
+        }
+    # Для счетов — спец. логика
+    if doc_type in ['счёт', 'счет']:
+        number, date = extract_invoice_number_and_date(text)
+        direction, counterparty = extract_invoice_parties(text)
+        return {
+            'amount': extract_amount(text),
+            'inn': extract_inn(text),
+            'company': counterparty,
+            'date': date,
+            'document_number': number,
             'direction': direction,
         }
     # Если это платёжное поручение
