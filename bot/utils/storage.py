@@ -9,12 +9,12 @@ def create_folder_structure(base_path: str, year: str = None) -> Dict[str, str]:
         year = datetime.now().strftime("%Y")
     
     folders = {
-        'счёт': os.path.join(base_path, year, 'Счета'),
+        'счет': os.path.join(base_path, year, 'Счета'),
         'акт': os.path.join(base_path, year, 'Акты'),
         'договор': os.path.join(base_path, year, 'Договора'),
         'накладная': os.path.join(base_path, year, 'Накладные'),
         'квитанция': os.path.join(base_path, year, 'Квитанции'),
-        'платёжное поручение': os.path.join(base_path, year, 'Платёжные поручения'),
+        'платежное поручение': os.path.join(base_path, year, 'Платёжные поручения'),
         'прочее': os.path.join(base_path, year, 'Прочее'),
     }
     
@@ -27,13 +27,13 @@ def create_folder_structure(base_path: str, year: str = None) -> Dict[str, str]:
 def get_target_folder(doc_type: str, company: str, base_path: str, year: str = None, direction: str = None) -> str:
     """Определяет целевую папку для документа"""
     folders = create_folder_structure(base_path, year)
-    folder_type = folders.get(doc_type, folders['прочее'])
+    doc_type_key = doc_type.lower().replace('ё', 'е') if doc_type else ''
+    folder_type = folders.get(doc_type_key, folders['прочее'])
 
     # Для платёжных поручений добавляем подпапку direction
-    if doc_type == 'платёжное поручение' and direction:
+    if doc_type_key == 'платежное поручение' and direction:
         folder_type = os.path.join(folder_type, direction)
 
-    # Если есть название компании, создаём подпапку
     if company:
         safe_company = "".join(c for c in company if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_company = safe_company.replace(' ', '_')
