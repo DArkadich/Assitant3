@@ -14,6 +14,7 @@ def create_folder_structure(base_path: str, year: str = None) -> Dict[str, str]:
         'договор': os.path.join(base_path, year, 'Договора'),
         'накладная': os.path.join(base_path, year, 'Накладные'),
         'квитанция': os.path.join(base_path, year, 'Квитанции'),
+        'платёжное поручение': os.path.join(base_path, year, 'Платёжные поручения'),
         'прочее': os.path.join(base_path, year, 'Прочее'),
     }
     
