@@ -40,6 +40,7 @@ async def process_document(file_path: str) -> Dict:
     print("process_document: Extracting text...")
     text = extract_text_with_ocr(file_path)
     print("process_document: Text extracted, length:", len(text))
+    print("=== EXTRACTED TEXT ===\n", text, "\n=== END TEXT ===")
     
     # 2. Классифицируем документ
     print("process_document: Classifying document...")
