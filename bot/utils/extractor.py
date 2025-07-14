@@ -196,10 +196,21 @@ def extract_invoice_number_and_date(text: str):
 def extract_invoice_parties(text: str):
     my_inns = [c for c in MY_COMPANIES if c.isdigit()]
     my_names = [c.lower() for c in MY_COMPANIES if not c.isdigit()]
-    m1 = re.search(r'Продавец:\s*([^\n,]+)', text)
-    m2 = re.search(r'Покупатель:\s*([^\n,]+)', text)
+    m1 = re.search(r'Продавец:\s*([^\n]+)', text)
+    m2 = re.search(r'Покупатель:\s*([^\n]+)', text)
     seller = m1.group(1).strip() if m1 else ""
     buyer = m2.group(1).strip() if m2 else ""
+    # Обрезаем до первых кавычек или до первой запятой
+    def clean_party(val):
+        if '"' in val:
+            parts = val.split('"')
+            if len(parts) >= 3:
+                val = f'"{parts[1]}"'
+        if ',' in val:
+            val = val.split(',')[0]
+        return val.strip()
+    seller = clean_party(seller)
+    buyer = clean_party(buyer)
     # Определяем направление
     if any(my in seller or my in seller.lower() for my in my_names) or any(my in seller for my in my_inns):
         return "Исходящие", buyer
