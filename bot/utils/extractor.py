@@ -140,9 +140,24 @@ def extract_payment_counterparty(text: str) -> str:
         return payer or payer_inn
     return ''
 
-def extract_all_receipts(text: str) -> Dict[str, any]:
+def extract_payment_amount(text: str) -> Optional[float]:
+    # Ищем сумму в формате 11000-00 или 11000–00
+    match = re.search(r'Сумма\s*([0-9]+[-–][0-9]+)', text)
+    if match:
+        amount_str = match.group(1).replace('-', '.').replace('–', '.')
+        try:
+            return float(amount_str)
+        except ValueError:
+            pass
+    return None
+
+def extract_all_receipts(text: str, doc_type: str = None) -> Dict[str, any]:
+    """Извлекает все реквизиты из текста документа с учётом типа документа"""
+    if doc_type is None:
+        from .classifier import classify_document
+        doc_type = classify_document(text)
     # Если это счёт, используем спец. функции
-    if re.search(r'счет на оплату', text, re.IGNORECASE):
+    if doc_type == 'счёт':
         return {
             'amount': extract_amount(text),
             'inn': extract_inn(text),
@@ -150,10 +165,10 @@ def extract_all_receipts(text: str) -> Dict[str, any]:
             'date': extract_invoice_date(text),
             'document_number': extract_invoice_number(text),
         }
-    # Если это платёжка
-    if re.search(r'плат[её]жн[а-я\s]*поручен', text, re.IGNORECASE):
+    # Если это платёжное поручение
+    if doc_type == 'платёжное поручение':
         return {
-            'amount': extract_amount(text),
+            'amount': extract_payment_amount(text),
             'inn': extract_inn(text),
             'company': extract_payment_counterparty(text),
             'date': extract_date(text),
