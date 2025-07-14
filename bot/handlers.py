@@ -41,6 +41,8 @@ async def process_document(file_path: str) -> Dict:
     text = extract_text_with_ocr(file_path)
     print("process_document: Text extracted, length:", len(text))
     print("=== EXTRACTED TEXT ===\n", text, "\n=== END TEXT ===")
+    with open("/app/last_extracted_text.txt", "w", encoding="utf-8") as f:
+        f.write(text)
     
     # 2. Классифицируем документ
     print("process_document: Classifying document...")
