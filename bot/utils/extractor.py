@@ -1,6 +1,11 @@
 import re
 from typing import Dict, Optional
 
+MY_COMPANIES = [
+    'ООО "Тормедтех"',
+    '7716958566',
+]
+
 def extract_invoice_number(text: str) -> str:
     match = re.search(r'Счет на оплату №\s*([A-Za-zА-Яа-я0-9]+)', text, re.IGNORECASE)
     if match:
@@ -107,8 +112,35 @@ def extract_company_name(text: str) -> str:
     
     return ""
 
+def extract_payment_parties(text: str):
+    # Извлекает плательщика, его ИНН, получателя, его ИНН
+    payer = ''
+    payer_inn = ''
+    receiver = ''
+    receiver_inn = ''
+    # Плательщик
+    m = re.search(r'ИНН\s*(\d{10,12})\s*\n\s*([^\n]+)', text, re.IGNORECASE)
+    if m:
+        payer_inn = m.group(1)
+        payer = m.group(2).strip()
+    # Получатель
+    m2 = re.search(r'ИНН\s*(\d{10,12})\s*\n\s*ООО\s*"([^"]+)"', text[m.end():] if m else text, re.IGNORECASE)
+    if m2:
+        receiver_inn = m2.group(1)
+        receiver = 'ООО "' + m2.group(2).strip() + '"'
+    return payer, payer_inn, receiver, receiver_inn
+
+def extract_payment_counterparty(text: str) -> str:
+    payer, payer_inn, receiver, receiver_inn = extract_payment_parties(text)
+    # Если плательщик — своя компания, контрагент — получатель
+    if any(my in payer or my in payer_inn for my in MY_COMPANIES):
+        return receiver or receiver_inn
+    # Если получатель — своя компания, контрагент — плательщик
+    if any(my in receiver or my in receiver_inn for my in MY_COMPANIES):
+        return payer or payer_inn
+    return ''
+
 def extract_all_receipts(text: str) -> Dict[str, any]:
-    """Извлекает все реквизиты из текста документа"""
     # Если это счёт, используем спец. функции
     if re.search(r'счет на оплату', text, re.IGNORECASE):
         return {
@@ -118,13 +150,22 @@ def extract_all_receipts(text: str) -> Dict[str, any]:
             'date': extract_invoice_date(text),
             'document_number': extract_invoice_number(text),
         }
+    # Если это платёжка
+    if re.search(r'плат[её]жн[а-я\s]*поручен', text, re.IGNORECASE):
+        return {
+            'amount': extract_amount(text),
+            'inn': extract_inn(text),
+            'company': extract_payment_counterparty(text),
+            'date': extract_date(text),
+            'document_number': extract_document_number(text),
+        }
     # иначе — стандартные
     return {
         'amount': extract_amount(text),
         'inn': extract_inn(text),
         'company': extract_company_name(text),
-        'date': extract_date(text),  # импортируем из classifier.py
-        'document_number': extract_document_number(text),  # импортируем из classifier.py
+        'date': extract_date(text),
+        'document_number': extract_document_number(text),
     }
 
 # Импортируем функции из classifier.py
