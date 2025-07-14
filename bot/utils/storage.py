@@ -23,25 +23,24 @@ def create_folder_structure(base_path: str, year: str = None) -> Dict[str, str]:
     
     return folders
 
-def get_target_folder(doc_type: str, company: str, base_path: str, year: str = None) -> str:
+def get_target_folder(doc_type: str, company: str, base_path: str, year: str = None, direction: str = None) -> str:
     """Определяет целевую папку для документа"""
     folders = create_folder_structure(base_path, year)
-    
-    # Определяем тип папки
     folder_type = folders.get(doc_type, folders['прочее'])
-    
+
+    # Для платёжных поручений добавляем подпапку direction
+    if doc_type == 'платёжное поручение' and direction:
+        folder_type = os.path.join(folder_type, direction)
+
     # Если есть название компании, создаём подпапку
     if company:
-        # Очищаем название компании от недопустимых символов
         safe_company = "".join(c for c in company if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_company = safe_company.replace(' ', '_')
         target_folder = os.path.join(folder_type, safe_company)
     else:
         target_folder = folder_type
-    
-    # Создаём папку
+
     os.makedirs(target_folder, exist_ok=True)
-    
     return target_folder
 
 def generate_filename(original_name: str, doc_type: str, doc_number: str, 

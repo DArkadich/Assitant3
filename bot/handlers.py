@@ -59,7 +59,8 @@ async def process_document(file_path: str) -> Dict:
         doc_type=doc_type,
         company=receipts.get('company', ''),
         base_path=DOCUMENTS_PATH,
-        year=year
+        year=year,
+        direction=receipts.get('direction', None)
     )
     print("process_document: Target folder:", target_folder)
     

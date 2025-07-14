@@ -151,6 +151,14 @@ def extract_payment_amount(text: str) -> Optional[float]:
             pass
     return None
 
+def extract_payment_direction(text: str) -> str:
+    payer, payer_inn, receiver, receiver_inn = extract_payment_parties(text)
+    if any(my in payer or my in payer_inn for my in MY_COMPANIES):
+        return "Исходящие"
+    if any(my in receiver or my in receiver_inn for my in MY_COMPANIES):
+        return "Входящие"
+    return ""
+
 def extract_all_receipts(text: str, doc_type: str = None) -> Dict[str, any]:
     """Извлекает все реквизиты из текста документа с учётом типа документа"""
     if doc_type is None:
@@ -167,12 +175,14 @@ def extract_all_receipts(text: str, doc_type: str = None) -> Dict[str, any]:
         }
     # Если это платёжное поручение
     if doc_type == 'платёжное поручение':
+        direction = extract_payment_direction(text)
         return {
             'amount': extract_payment_amount(text),
             'inn': extract_inn(text),
             'company': extract_payment_counterparty(text),
             'date': extract_date(text),
             'document_number': extract_document_number(text),
+            'direction': direction,
         }
     # иначе — стандартные
     return {
