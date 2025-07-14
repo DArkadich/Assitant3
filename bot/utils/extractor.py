@@ -116,16 +116,21 @@ def extract_payment_parties(text: str):
     lines = text.splitlines()
     payer, payer_inn, receiver, receiver_inn = '', '', '', ''
     my_inns = [c for c in MY_COMPANIES if c.isdigit()]
+    found_payer = found_receiver = False
     for i, line in enumerate(lines):
         m = re.search(r'инн\s*(\d{10,12})', line, re.IGNORECASE)
         if m:
             inn = m.group(1)
-            if inn in my_inns and i+1 < len(lines):
+            if not found_payer and inn in my_inns and i+1 < len(lines):
                 payer_inn = inn
                 payer = lines[i+1].strip()
-            elif i+1 < len(lines):
+                found_payer = True
+            elif not found_receiver and inn not in my_inns and i+1 < len(lines):
                 receiver_inn = inn
                 receiver = lines[i+1].strip()
+                found_receiver = True
+        if found_payer and found_receiver:
+            break
     return payer, payer_inn, receiver, receiver_inn
 
 def extract_payment_counterparty(text: str) -> str:
