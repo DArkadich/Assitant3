@@ -15,6 +15,12 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY bot/ ./bot/
+COPY extractor/ ./extractor/
+COPY classifier/ ./classifier/
+COPY legality_check/ ./legality_check/
+COPY rag_engine/ ./rag_engine/
+COPY analytics/ ./analytics/
+COPY closure_check/ ./closure_check/
 
 CMD ["python", "bot/main.py"] 
