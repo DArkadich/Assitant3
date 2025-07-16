@@ -7,20 +7,18 @@ __pycache__/
 # Env
 .env
 
-# SQLite
-*.sqlite3
-database/
-!database/.gitkeep
-
-# Документы
-/data/
-!data/Документы/.gitkeep
-
-# VSCode/Cursor
-.vscode/
-
-# Docker
+# Data and DB
+*.sqlite
+*.db
+*.faiss
+*.pkl
 *.log
+data/
+uploads/
+analytics/
+closure_check/
+rag_engine/
+contracts_db/
 
 # System
 .DS_Store 
