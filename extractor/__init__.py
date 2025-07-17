@@ -22,7 +22,8 @@ def extract_fields_from_text(doc_text: str) -> dict:
     # Очищаем и ограничиваем длину текста
     safe_text = clean_text(doc_text)[:MAX_CHARS]
     prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=safe_text)
-    logging.info(f"Prompt to LLM (len={len(safe_text)}): {prompt[:200]}...")
+    print(f"Prompt to LLM (len={len(safe_text)}): {prompt}")
+    logging.info(f"Prompt to LLM (len={len(safe_text)}): {prompt}")
     try:
         response = query_ollama(prompt)
         try:

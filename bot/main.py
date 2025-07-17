@@ -82,6 +82,8 @@ async def handle_document(message: Message):
     ext = filename.rsplit(".", 1)[-1].lower()
     if ext in ("pdf", "docx", "jpg", "jpeg"):
         text = process_file(file_path)
+        print(f"Text to LLM: {text[:200]}")
+        logging.info(f"Text to LLM: {text[:200]}")
         if not text:
             await message.reply("❌ Не удалось извлечь текст из документа.")
             return
