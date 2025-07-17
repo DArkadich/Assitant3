@@ -9,13 +9,7 @@ from aiogram.utils import executor
 from aiogram.dispatcher.filters import ContentTypeFilter
 from dotenv import load_dotenv
 
-from extractor import extract_fields_from_text
-
-# Реальные функции для извлечения текста
-import pdfplumber
-from docx import Document
-from PIL import Image
-import pytesseract
+from extractor import extract_fields_from_text, process_file_with_classification
 
 # Очередь задач
 task_queue = asyncio.Queue()
@@ -37,24 +31,12 @@ ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "docx", "xlsx", "zip"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def process_file(file_path):
-    ext = file_path.rsplit(".", 1)[-1].lower()
-    if ext == "pdf":
-        text = extract_text_from_pdf(file_path)
-    elif ext == "docx":
-        text = extract_text_from_docx(file_path)
-    elif ext in ("jpg", "jpeg"):
-        text = extract_text_from_jpg(file_path)
-    else:
-        text = None
-    return text
-
 # Воркер для обработки очереди документов
 async def document_worker():
     while True:
         user_id, filename, file_path, ext = await task_queue.get()
         try:
-            text = process_file(file_path)
+            text = process_file_with_classification(file_path)
             print(f"Text to LLM: {text[:200]}")
             logging.info(f"Text to LLM: {text[:200]}")
             if not text:
