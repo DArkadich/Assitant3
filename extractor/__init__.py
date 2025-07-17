@@ -1,8 +1,16 @@
 from .ollama_client import query_ollama, EXTRACTION_PROMPT_TEMPLATE
 import json
 import logging
+import re
 
-MAX_CHARS = 4000  # Максимальная длина текста для LLM
+MAX_CHARS = 1000  # Максимальная длина текста для LLM (ещё меньше для стабильности)
+
+
+def clean_text(text: str) -> str:
+    # Удаляем лишние пробелы, пустые строки, оставляем только буквы, цифры, знаки препинания
+    text = re.sub(r'[^\w\d\s.,:;!?@#№\-_/\\()\[\]{}"\'\n]', '', text, flags=re.UNICODE)
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return ' '.join(lines)
 
 
 def extract_fields_from_text(doc_text: str) -> dict:
@@ -11,8 +19,8 @@ def extract_fields_from_text(doc_text: str) -> dict:
     Возвращает dict с полями: inn, counterparty, doc_number, date, amount, subject, contract_number.
     Если LLM не вернул корректный JSON, возвращает None.
     """
-    # Ограничиваем длину текста
-    safe_text = doc_text[:MAX_CHARS]
+    # Очищаем и ограничиваем длину текста
+    safe_text = clean_text(doc_text)[:MAX_CHARS]
     prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=safe_text)
     logging.info(f"Prompt to LLM (len={len(safe_text)}): {prompt[:200]}...")
     try:
