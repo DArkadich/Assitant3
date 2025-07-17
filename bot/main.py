@@ -2,6 +2,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 import os
+import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from aiogram.utils import executor
@@ -16,26 +17,8 @@ from docx import Document
 from PIL import Image
 import pytesseract
 
-
-def extract_text_from_pdf(file_path):
-    try:
-        with pdfplumber.open(file_path) as pdf:
-            return "\n".join(page.extract_text() or "" for page in pdf.pages)
-    except Exception:
-        return ""
-
-def extract_text_from_docx(file_path):
-    try:
-        doc = Document(file_path)
-        return "\n".join([p.text for p in doc.paragraphs])
-    except Exception:
-        return ""
-
-def extract_text_from_jpg(file_path):
-    try:
-        return pytesseract.image_to_string(Image.open(file_path), lang='rus+eng')
-    except Exception:
-        return ""
+# Очередь задач
+task_queue = asyncio.Queue()
 
 # Загрузка токена из .env (создайте .env с TELEGRAM_TOKEN=...)
 load_dotenv()
@@ -51,10 +34,8 @@ dp = Dispatcher(bot)
 # Разрешённые расширения
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "docx", "xlsx", "zip"}
 
-
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
 
 def process_file(file_path):
     ext = file_path.rsplit(".", 1)[-1].lower()
@@ -68,6 +49,27 @@ def process_file(file_path):
         text = None
     return text
 
+# Воркер для обработки очереди документов
+async def document_worker():
+    while True:
+        user_id, filename, file_path, ext = await task_queue.get()
+        try:
+            text = process_file(file_path)
+            print(f"Text to LLM: {text[:200]}")
+            logging.info(f"Text to LLM: {text[:200]}")
+            if not text:
+                await bot.send_message(user_id, f"❌ Не удалось извлечь текст из документа {filename}.")
+            else:
+                fields = extract_fields_from_text(text)
+                if fields:
+                    await bot.send_message(user_id, f"Извлечённые данные для '{filename}':\n<pre>{fields}</pre>", parse_mode="HTML")
+                else:
+                    await bot.send_message(user_id, f"❌ Не удалось извлечь ключевые поля из документа {filename}.")
+        except Exception as e:
+            await bot.send_message(user_id, f"❌ Ошибка при обработке документа {filename}: {e}")
+        finally:
+            task_queue.task_done()
+
 @dp.message_handler(content_types=types.ContentType.DOCUMENT)
 async def handle_document(message: Message):
     document = message.document
@@ -77,23 +79,9 @@ async def handle_document(message: Message):
         return
     file_path = os.path.join(TEMP_DIR, filename)
     await document.download(destination_file=file_path)
-    await message.reply(f"✅ Документ '{filename}' получен и сохранён. Извлекаю данные...")
-
     ext = filename.rsplit(".", 1)[-1].lower()
-    if ext in ("pdf", "docx", "jpg", "jpeg"):
-        text = process_file(file_path)
-        print(f"Text to LLM: {text[:200]}")
-        logging.info(f"Text to LLM: {text[:200]}")
-        if not text:
-            await message.reply("❌ Не удалось извлечь текст из документа.")
-            return
-        fields = extract_fields_from_text(text)
-        if fields:
-            await message.reply(f"Извлечённые данные:\n<pre>{fields}</pre>", parse_mode="HTML")
-        else:
-            await message.reply("❌ Не удалось извлечь ключевые поля из документа.")
-    else:
-        await message.reply("Пока поддерживаются только PDF, DOCX, JPG. Поддержка XLSX и ZIP будет позже.")
+    await message.reply(f"✅ Документ '{filename}' получен и поставлен в очередь на обработку.")
+    await task_queue.put((message.from_user.id, filename, file_path, ext))
 
 @dp.message_handler(content_types=types.ContentType.PHOTO)
 async def handle_photo(message: Message):
@@ -103,24 +91,17 @@ async def handle_photo(message: Message):
     filename = f"photo_{file_id}.jpg"
     file_path = os.path.join(TEMP_DIR, filename)
     await photo.download(destination_file=file_path)
-    await message.reply(f"✅ Фото получено и сохранено как '{filename}'. Извлекаю данные...")
-    text = extract_text_from_jpg(file_path)
-    if not text:
-        await message.reply("❌ Не удалось извлечь текст из фото.")
-        return
-    fields = extract_fields_from_text(text)
-    if fields:
-        await message.reply(f"Извлечённые данные:\n<pre>{fields}</pre>", parse_mode="HTML")
-    else:
-        await message.reply("❌ Не удалось извлечь ключевые поля из фото.")
+    await message.reply(f"✅ Фото получено и поставлено в очередь на обработку.")
+    await task_queue.put((message.from_user.id, filename, file_path, "jpg"))
 
 @dp.message_handler(commands=["start", "help"])
 async def send_welcome(message: Message):
-    await message.reply("Привет! Отправьте мне документ (PDF, JPG, DOCX, XLSX, ZIP), и я его обработаю.")
-
+    await message.reply("Привет! Отправьте мне документ (PDF, JPG, DOCX, XLSX, ZIP), и я его обработаю.\nДокументы обрабатываются по очереди, вы получите результат после завершения обработки каждого файла.")
 
 def main():
-    executor.start_polling(dp, skip_updates=True)
+    loop = asyncio.get_event_loop()
+    loop.create_task(document_worker())
+    executor.start_polling(dp, skip_updates=True, loop=loop)
 
 if __name__ == "__main__":
     main() 

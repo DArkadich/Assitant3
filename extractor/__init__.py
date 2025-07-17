@@ -3,7 +3,7 @@ import json
 import logging
 import re
 
-MAX_CHARS = 1000  # Максимальная длина текста для LLM (ещё меньше для стабильности)
+MAX_CHARS = 4000  # Максимальная длина текста для LLM (расширено для полноты)
 
 
 def clean_text(text: str) -> str:
