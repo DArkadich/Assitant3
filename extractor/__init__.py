@@ -2,6 +2,7 @@ from .ollama_client import query_ollama, EXTRACTION_PROMPT_TEMPLATE
 import json
 import logging
 import re
+from io import BytesIO
 
 MAX_CHARS = 4000  # Максимальная длина текста для LLM (расширено для полноты)
 
@@ -29,9 +30,27 @@ def classify_document_llm(text: str) -> str:
 # --- Извлечение текста для разных типов документов ---
 def extract_full_text_from_pdf(file_path):
     try:
+        import pdfplumber
         with pdfplumber.open(file_path) as pdf:
-            return "\n".join(page.extract_text() or "" for page in pdf.pages)
-    except Exception:
+            text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+            logging.info(f"[PDF] Извлечённый текст (первые 200 символов): {text[:200]}")
+            if text.strip():
+                return text
+            # Если текст пустой — пробуем OCR
+            logging.info("[PDF] Текст не найден, пробую OCR для сканированного PDF...")
+            from PIL import Image
+            import pytesseract
+            ocr_text = ""
+            for page in pdf.pages:
+                img = page.to_image(resolution=300).original
+                buf = BytesIO()
+                img.save(buf, format='PNG')
+                buf.seek(0)
+                ocr_text += pytesseract.image_to_string(Image.open(buf), lang='rus+eng') + "\n"
+            logging.info(f"[PDF][OCR] Извлечённый текст (первые 200 символов): {ocr_text[:200]}")
+            return ocr_text.strip()
+    except Exception as e:
+        logging.error(f"[PDF] Ошибка при извлечении текста: {e}")
         return ""
 
 def extract_text_from_pdf_contract(file_path):

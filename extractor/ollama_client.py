@@ -18,7 +18,7 @@ def query_ollama(prompt: str) -> str:
             "messages": [{"role": "user", "content": prompt}],
             "stream": False
         },
-        timeout=60
+        timeout=180
     )
     response.raise_for_status()
     return response.json()["message"]["content"]
