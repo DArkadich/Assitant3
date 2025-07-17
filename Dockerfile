@@ -1,6 +1,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 # Установим системные зависимости для OCR и работы с docx/xlsx
 RUN apt-get update && apt-get install -y \
@@ -13,7 +14,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -r requirements.txt
 
 COPY bot/ ./bot/
 COPY extractor/ ./extractor/
