@@ -7,18 +7,32 @@ from dotenv import load_dotenv
 
 from extractor import extract_fields_from_text
 
-# Для OCR и парсинга документов (заглушки, можно заменить на реальные импорты)
+# Реальные функции для извлечения текста
+import pdfplumber
+from docx import Document
+from PIL import Image
+import pytesseract
+
+
 def extract_text_from_pdf(file_path):
-    # TODO: заменить на pdfplumber
-    return "PDF TEXT (заглушка)"
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            return "\n".join(page.extract_text() or "" for page in pdf.pages)
+    except Exception:
+        return ""
 
 def extract_text_from_docx(file_path):
-    # TODO: заменить на python-docx
-    return "DOCX TEXT (заглушка)"
+    try:
+        doc = Document(file_path)
+        return "\n".join([p.text for p in doc.paragraphs])
+    except Exception:
+        return ""
 
 def extract_text_from_jpg(file_path):
-    # TODO: заменить на OCR (doctr/pytesseract)
-    return "JPG TEXT (заглушка)"
+    try:
+        return pytesseract.image_to_string(Image.open(file_path), lang='rus+eng')
+    except Exception:
+        return ""
 
 # Загрузка токена из .env (создайте .env с TELEGRAM_TOKEN=...)
 load_dotenv()
