@@ -95,19 +95,23 @@ def extract_text_from_jpg(file_path):
 # --- Универсальная эвристика + LLM для классификации ---
 def classify_document_universal(text: str) -> str:
     first_lines = "\n".join(text.lower().splitlines()[:5])
-    keywords = {
-        "договор": "договор",
-        "акт": "акт",
-        "накладная": "накладная",
-        "передаточный": "передаточный",
-        "счет": "счёт",
-        "счёт": "счёт"
-    }
-    for word, doc_type in keywords.items():
-        if word in first_lines:
-            logging.info(f"[Классификация] Найдено ключевое слово '{word}' в первых строках, тип: {doc_type}")
-            return doc_type
-    # Если не нашли — спрашиваем LLM
+    # Приоритет: акт > накладная > передаточный > счет > договор
+    if "акт" in first_lines:
+        logging.info(f"[Классификация] Найдено ключевое слово 'акт' в первых строках, тип: акт")
+        return "акт"
+    if "накладная" in first_lines:
+        logging.info(f"[Классификация] Найдено ключевое слово 'накладная' в первых строках, тип: накладная")
+        return "накладная"
+    if "передаточный" in first_lines:
+        logging.info(f"[Классификация] Найдено ключевое слово 'передаточный' в первых строках, тип: передаточный")
+        return "передаточный"
+    if "счет" in first_lines or "счёт" in first_lines:
+        logging.info(f"[Классификация] Найдено ключевое слово 'счет/счёт' в первых строках, тип: счет")
+        return "счёт"
+    if "договор" in first_lines:
+        logging.info(f"[Классификация] Найдено ключевое слово 'договор' в первых строках, тип: договор")
+        return "договор"
+    # Если ничего не найдено — спрашиваем LLM
     return classify_document_llm(text)
 
 # --- Универсальная функция для bot/main.py ---
