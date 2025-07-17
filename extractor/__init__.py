@@ -92,21 +92,39 @@ def extract_text_from_jpg(file_path):
     except Exception:
         return ""
 
+# --- Универсальная эвристика + LLM для классификации ---
+def classify_document_universal(text: str) -> str:
+    first_lines = "\n".join(text.lower().splitlines()[:5])
+    keywords = {
+        "договор": "договор",
+        "акт": "акт",
+        "накладная": "накладная",
+        "передаточный": "передаточный",
+        "счет": "счёт",
+        "счёт": "счёт"
+    }
+    for word, doc_type in keywords.items():
+        if word in first_lines:
+            logging.info(f"[Классификация] Найдено ключевое слово '{word}' в первых строках, тип: {doc_type}")
+            return doc_type
+    # Если не нашли — спрашиваем LLM
+    return classify_document_llm(text)
+
 # --- Универсальная функция для bot/main.py ---
 def process_file_with_classification(file_path):
     ext = file_path.rsplit(".", 1)[-1].lower()
     if ext == "pdf":
         full_text = extract_full_text_from_pdf(file_path)
-        doc_type = classify_document_llm(full_text[:MAX_CHARS])
-        logging.info(f"Document type (LLM): {doc_type}")
+        doc_type = classify_document_universal(full_text[:MAX_CHARS])
+        logging.info(f"Document type (universal): {doc_type}")
         if doc_type == "договор":
             return extract_text_from_pdf_contract(file_path)
         else:
             return full_text[:MAX_CHARS]
     elif ext == "docx":
         full_text = extract_full_text_from_docx(file_path)
-        doc_type = classify_document_llm(full_text[:MAX_CHARS])
-        logging.info(f"Document type (LLM): {doc_type}")
+        doc_type = classify_document_universal(full_text[:MAX_CHARS])
+        logging.info(f"Document type (universal): {doc_type}")
         if doc_type == "договор":
             return extract_text_from_docx_contract(file_path)
         else:
