@@ -4,7 +4,8 @@ import logging
 import re
 from io import BytesIO
 
-MAX_CHARS = 800  # Максимальная длина текста для LLM (скользящее окно)
+MAX_CHARS = 1500  # Максимальная длина текста для LLM (скользящее окно)
+OVERLAP = 750     # Перекрытие между окнами (50%)
 
 # --- Классификация типа документа через LLM ---
 CLASSIFY_PROMPT_TEMPLATE = (
@@ -158,7 +159,7 @@ def merge_fields(base: dict, new: dict) -> dict:
 
 def extract_fields_from_text(doc_text: str) -> dict:
     """
-    Извлекает ключевые поля из текста документа с помощью Ollama LLM (скользящее окно).
+    Извлекает ключевые поля из текста документа с помощью Ollama LLM (скользящее окно с overlap).
     Возвращает dict с полями: inn, counterparty, doc_number, date, amount, subject, contract_number.
     Если LLM не вернул корректный JSON, возвращает None.
     """
@@ -166,9 +167,8 @@ def extract_fields_from_text(doc_text: str) -> dict:
     total_len = len(clean)
     result = {k: "-" for k in ["inn", "counterparty", "doc_number", "date", "amount", "subject", "contract_number"]}
     windows = 0
-    for i in range(0, total_len, MAX_CHARS):
-        if windows >= 10:
-            break
+    i = 0
+    while i < total_len and windows < 10:
         window_text = clean[i:i+MAX_CHARS]
         prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=window_text)
         logging.info(f"Prompt to LLM (window {windows+1}, chars {i}-{i+MAX_CHARS}): {prompt[:200]}...")
@@ -182,13 +182,13 @@ def extract_fields_from_text(doc_text: str) -> dict:
             json_str = response[start:end]
             fields = json.loads(json_str)
             result = merge_fields(result, fields)
-            # Если все поля заполнены — можно завершить раньше
             if all(result[k] and result[k] != "-" and result[k].lower() not in ("not specified", "none", "-") for k in result):
                 break
         except Exception as e:
             logging.error(f"Error querying Ollama LLM or parsing JSON: {e}")
             continue
         windows += 1
+        i += OVERLAP
     logging.info(f"LLM windows used: {windows}, result: {result}")
     return result
 
