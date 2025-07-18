@@ -4,7 +4,7 @@ import logging
 import re
 from io import BytesIO
 
-MAX_CHARS = 2000  # Максимальная длина текста для LLM (уменьшено для ускорения ответа)
+MAX_CHARS = 800  # Максимальная длина текста для LLM (скользящее окно)
 
 # --- Классификация типа документа через LLM ---
 CLASSIFY_PROMPT_TEMPLATE = (
@@ -146,34 +146,51 @@ def clean_text(text: str) -> str:
     return ' '.join(lines)
 
 
+def merge_fields(base: dict, new: dict) -> dict:
+    # Объединяет два результата, не перезаписывая найденные значения
+    result = base.copy()
+    for k, v in new.items():
+        if (not result.get(k)) or result[k] == "-" or result[k].lower() in ("not specified", "none", "-"):
+            if v and v != "-" and v.lower() not in ("not specified", "none", "-"):
+                result[k] = v
+    return result
+
+
 def extract_fields_from_text(doc_text: str) -> dict:
     """
-    Извлекает ключевые поля из текста документа с помощью Ollama LLM.
+    Извлекает ключевые поля из текста документа с помощью Ollama LLM (скользящее окно).
     Возвращает dict с полями: inn, counterparty, doc_number, date, amount, subject, contract_number.
     Если LLM не вернул корректный JSON, возвращает None.
     """
-    # Очищаем и ограничиваем длину текста
-    safe_text = clean_text(doc_text)[:MAX_CHARS]
-    prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=safe_text)
-    print(f"Prompt to LLM (len={len(safe_text)}): {prompt}")
-    logging.info(f"Prompt to LLM (len={len(safe_text)}): {prompt}")
-    try:
-        response = query_ollama(prompt)
+    clean = clean_text(doc_text)
+    total_len = len(clean)
+    result = {k: "-" for k in ["inn", "counterparty", "doc_number", "date", "amount", "subject", "contract_number"]}
+    windows = 0
+    for i in range(0, total_len, MAX_CHARS):
+        if windows >= 10:
+            break
+        window_text = clean[i:i+MAX_CHARS]
+        prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=window_text)
+        logging.info(f"Prompt to LLM (window {windows+1}, chars {i}-{i+MAX_CHARS}): {prompt[:200]}...")
         try:
-            # Ищем JSON в ответе LLM
+            response = query_ollama(prompt)
             start = response.find('{')
             end = response.rfind('}') + 1
             if start == -1 or end == -1:
                 logging.warning("LLM did not return JSON.")
-                return None
+                continue
             json_str = response[start:end]
-            return json.loads(json_str)
+            fields = json.loads(json_str)
+            result = merge_fields(result, fields)
+            # Если все поля заполнены — можно завершить раньше
+            if all(result[k] and result[k] != "-" and result[k].lower() not in ("not specified", "none", "-") for k in result):
+                break
         except Exception as e:
-            logging.error(f"Error parsing LLM response as JSON: {e}")
-            return None
-    except Exception as e:
-        logging.error(f"Error querying Ollama LLM: {e}")
-        return None
+            logging.error(f"Error querying Ollama LLM or parsing JSON: {e}")
+            continue
+        windows += 1
+    logging.info(f"LLM windows used: {windows}, result: {result}")
+    return result
 
 # Пример использования:
 # fields = extract_fields_from_text("Текст документа ...")
