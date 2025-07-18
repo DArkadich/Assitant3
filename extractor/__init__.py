@@ -4,7 +4,7 @@ import logging
 import re
 from io import BytesIO
 
-MAX_CHARS = 4000  # Максимальная длина текста для LLM (расширено для полноты)
+MAX_CHARS = 2000  # Максимальная длина текста для LLM (уменьшено для ускорения ответа)
 
 # --- Классификация типа документа через LLM ---
 CLASSIFY_PROMPT_TEMPLATE = (
