@@ -50,9 +50,20 @@ async def document_worker():
                 # Извлекаем поля
                 fields = extract_fields_from_text(text)
                 if fields:
-                    # Добавляем тип документа в результат
+                    # Добавляем тип документа в результат и переупорядочиваем поля
                     fields['doc_type'] = doc_type
-                    await bot.send_message(user_id, f"Извлечённые данные для '{filename}':\n<pre>{fields}</pre>", parse_mode="HTML")
+                    # Создаём новый словарь с нужным порядком полей
+                    ordered_fields = {
+                        'doc_type': fields['doc_type'],
+                        'counterparty': fields['counterparty'],
+                        'inn': fields['inn'],
+                        'doc_number': fields['doc_number'],
+                        'date': fields['date'],
+                        'amount': fields['amount'],
+                        'subject': fields['subject'],
+                        'contract_number': fields['contract_number']
+                    }
+                    await bot.send_message(user_id, f"Извлечённые данные для '{filename}':\n<pre>{ordered_fields}</pre>", parse_mode="HTML")
                 else:
                     await bot.send_message(user_id, f"❌ Не удалось извлечь ключевые поля из документа {filename}.")
         except Exception as e:
