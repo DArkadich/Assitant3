@@ -38,9 +38,10 @@ def extract_full_text_from_pdf(file_path):
             import cv2
             import numpy as np
             import traceback
-            
+            import subprocess
+            import os
             ocr_text = ""
-            for page in pdf.pages:
+            for i, page in enumerate(pdf.pages):
                 img = page.to_image(resolution=400).original
                 buf = BytesIO()
                 img.save(buf, format='PNG')
@@ -55,14 +56,29 @@ def extract_full_text_from_pdf(file_path):
                 gray = clahe.apply(gray)
                 gray = cv2.medianBlur(gray, 3)
                 enhanced_img = Image.fromarray(gray)
+                # Сохраняем PNG для диагностики
+                png_path = f"/tmp/ocr_page_{i+1}.png"
+                enhanced_img.save(png_path)
+                logging.info(f"[PDF][OCR] Saved {png_path} for manual OCR test")
                 custom_config = r'--oem 3 --psm 6'
                 logging.info(f"[PDF][OCR] config: {custom_config}")
                 try:
+                    # Сначала пробуем pytesseract
                     page_text = pytesseract.image_to_string(enhanced_img, lang='rus', config=custom_config)
                 except Exception as ocr_e:
                     logging.error(f"[PDF][OCR] Ошибка pytesseract: {ocr_e}")
                     logging.error(traceback.format_exc())
-                    page_text = ''
+                    # Пробуем через subprocess
+                    try:
+                        result = subprocess.run([
+                            'tesseract', png_path, 'stdout', '-l', 'rus', '--oem', '3', '--psm', '6'
+                        ], capture_output=True, text=True)
+                        logging.error(f"[PDF][OCR][subprocess] stderr: {result.stderr}")
+                        page_text = result.stdout
+                    except Exception as sub_e:
+                        logging.error(f"[PDF][OCR][subprocess] Ошибка: {sub_e}")
+                        logging.error(traceback.format_exc())
+                        page_text = ''
                 ocr_text += page_text + "\n"
             logging.info(f"[PDF][OCR] Извлечённый текст (первые 200 символов): {ocr_text[:200]}")
             return ocr_text.strip()
