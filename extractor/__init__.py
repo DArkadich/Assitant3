@@ -37,44 +37,39 @@ def extract_full_text_from_pdf(file_path):
             import pytesseract
             import cv2
             import numpy as np
+            import traceback
             
             ocr_text = ""
             for page in pdf.pages:
-                img = page.to_image(resolution=400).original  # Увеличиваем разрешение
+                img = page.to_image(resolution=400).original
                 buf = BytesIO()
                 img.save(buf, format='PNG')
                 buf.seek(0)
-                
-                # Предобработка изображения для улучшения OCR
                 pil_img = Image.open(buf)
                 img_array = np.array(pil_img)
-                
-                # Конвертируем в оттенки серого
                 if len(img_array.shape) == 3:
                     gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
                 else:
                     gray = img_array
-                
-                # Применяем фильтры для улучшения качества
-                # Увеличиваем контраст
                 clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
                 gray = clahe.apply(gray)
-                
-                # Убираем шум
                 gray = cv2.medianBlur(gray, 3)
-                
-                # Конвертируем обратно в PIL Image
                 enhanced_img = Image.fromarray(gray)
-                
-                # OCR с улучшенными настройками
-                custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя.,:;!?@#№\-_/\\()\[\]{}"\'\n '
-                page_text = pytesseract.image_to_string(enhanced_img, lang='rus', config=custom_config)
+                custom_config = r'--oem 3 --psm 6'
+                logging.info(f"[PDF][OCR] config: {custom_config}")
+                try:
+                    page_text = pytesseract.image_to_string(enhanced_img, lang='rus', config=custom_config)
+                except Exception as ocr_e:
+                    logging.error(f"[PDF][OCR] Ошибка pytesseract: {ocr_e}")
+                    logging.error(traceback.format_exc())
+                    page_text = ''
                 ocr_text += page_text + "\n"
-                
             logging.info(f"[PDF][OCR] Извлечённый текст (первые 200 символов): {ocr_text[:200]}")
             return ocr_text.strip()
     except Exception as e:
+        import traceback
         logging.error(f"[PDF] Ошибка при извлечении текста: {e}")
+        logging.error(traceback.format_exc())
         return ""
 
 def extract_text_from_pdf_contract(file_path):
@@ -114,33 +109,29 @@ def extract_text_from_jpg(file_path):
         import pytesseract
         import cv2
         import numpy as np
-        
-        # Загружаем изображение
+        import traceback
         pil_img = Image.open(file_path)
         img_array = np.array(pil_img)
-        
-        # Конвертируем в оттенки серого
         if len(img_array.shape) == 3:
             gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
         else:
             gray = img_array
-        
-        # Применяем фильтры для улучшения качества
-        # Увеличиваем контраст
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
         gray = clahe.apply(gray)
-        
-        # Убираем шум
         gray = cv2.medianBlur(gray, 3)
-        
-        # Конвертируем обратно в PIL Image
         enhanced_img = Image.fromarray(gray)
-        
-        # OCR с улучшенными настройками
-        custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя.,:;!?@#№\-_/\\()\[\]{}"\'\n '
-        return pytesseract.image_to_string(enhanced_img, lang='rus', config=custom_config)
+        custom_config = r'--oem 3 --psm 6'
+        logging.info(f"[JPG][OCR] config: {custom_config}")
+        try:
+            return pytesseract.image_to_string(enhanced_img, lang='rus', config=custom_config)
+        except Exception as ocr_e:
+            logging.error(f"[JPG][OCR] Ошибка pytesseract: {ocr_e}")
+            logging.error(traceback.format_exc())
+            return ""
     except Exception as e:
+        import traceback
         logging.error(f"[JPG] Ошибка при извлечении текста: {e}")
+        logging.error(traceback.format_exc())
         return ""
 
 # --- Универсальная эвристика + LLM для классификации ---
