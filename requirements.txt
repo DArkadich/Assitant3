@@ -7,9 +7,5 @@ faiss-cpu
 peewee
 python-dotenv
 Pillow
-openpyxl
-pandas
-scikit-learn
-sentence-transformers
-rapidfuzz
-sqlite-utils 
+opencv-python
+numpy 

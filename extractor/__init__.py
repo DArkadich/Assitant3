@@ -1,4 +1,4 @@
-from .ollama_client import query_ollama, EXTRACTION_PROMPT_TEMPLATE, OUR_COMPANY
+from .ollama_client import query_ollama, EXTRACTION_PROMPT_TEMPLATE, CLASSIFY_PROMPT_TEMPLATE, ROLE_PROMPT_TEMPLATE, OUR_COMPANY
 import json
 import logging
 import re
@@ -8,13 +8,7 @@ MAX_CHARS = 1500  # Максимальная длина текста для LLM 
 OVERLAP = 750     # Перекрытие между окнами (50%)
 
 # --- Классификация типа документа через LLM ---
-CLASSIFY_PROMPT_TEMPLATE = (
-    """
-    Определи тип документа по тексту. Возможные типы: договор, акт, счёт, накладная, выписка банка, иной. Верни только тип одним словом (например: договор).
-    Текст документа:
-    """
-    "{text}"
-)
+# CLASSIFY_PROMPT_TEMPLATE теперь импортируется из ollama_client.py
 
 def classify_document_llm(text: str) -> str:
     prompt = CLASSIFY_PROMPT_TEMPLATE.format(text=text[:2000])
@@ -41,13 +35,42 @@ def extract_full_text_from_pdf(file_path):
             logging.info("[PDF] Текст не найден, пробую OCR для сканированного PDF...")
             from PIL import Image
             import pytesseract
+            import cv2
+            import numpy as np
+            
             ocr_text = ""
             for page in pdf.pages:
-                img = page.to_image(resolution=300).original
+                img = page.to_image(resolution=400).original  # Увеличиваем разрешение
                 buf = BytesIO()
                 img.save(buf, format='PNG')
                 buf.seek(0)
-                ocr_text += pytesseract.image_to_string(Image.open(buf), lang='rus+eng') + "\n"
+                
+                # Предобработка изображения для улучшения OCR
+                pil_img = Image.open(buf)
+                img_array = np.array(pil_img)
+                
+                # Конвертируем в оттенки серого
+                if len(img_array.shape) == 3:
+                    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+                else:
+                    gray = img_array
+                
+                # Применяем фильтры для улучшения качества
+                # Увеличиваем контраст
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                gray = clahe.apply(gray)
+                
+                # Убираем шум
+                gray = cv2.medianBlur(gray, 3)
+                
+                # Конвертируем обратно в PIL Image
+                enhanced_img = Image.fromarray(gray)
+                
+                # OCR с улучшенными настройками
+                custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя.,:;!?@#№\-_/\\()\[\]{}"\'\n '
+                page_text = pytesseract.image_to_string(enhanced_img, lang='rus', config=custom_config)
+                ocr_text += page_text + "\n"
+                
             logging.info(f"[PDF][OCR] Извлечённый текст (первые 200 символов): {ocr_text[:200]}")
             return ocr_text.strip()
     except Exception as e:
@@ -89,8 +112,35 @@ def extract_text_from_jpg(file_path):
     try:
         from PIL import Image
         import pytesseract
-        return pytesseract.image_to_string(Image.open(file_path), lang='rus+eng')
-    except Exception:
+        import cv2
+        import numpy as np
+        
+        # Загружаем изображение
+        pil_img = Image.open(file_path)
+        img_array = np.array(pil_img)
+        
+        # Конвертируем в оттенки серого
+        if len(img_array.shape) == 3:
+            gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img_array
+        
+        # Применяем фильтры для улучшения качества
+        # Увеличиваем контраст
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+        
+        # Убираем шум
+        gray = cv2.medianBlur(gray, 3)
+        
+        # Конвертируем обратно в PIL Image
+        enhanced_img = Image.fromarray(gray)
+        
+        # OCR с улучшенными настройками
+        custom_config = r'--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя.,:;!?@#№\-_/\\()\[\]{}"\'\n '
+        return pytesseract.image_to_string(enhanced_img, lang='rus', config=custom_config)
+    except Exception as e:
+        logging.error(f"[JPG] Ошибка при извлечении текста: {e}")
         return ""
 
 # --- Универсальная эвристика + LLM для классификации ---
@@ -98,13 +148,19 @@ def classify_document_universal(text: str) -> str:
     first_lines = "\n".join(text.lower().splitlines()[:5])
     logging.info(f"[Классификация] Первые 5 строк (lowercase): {first_lines}")
     
-    # Приоритет: акт > накладная > передаточный > счет > договор
+    # Приоритет: упд > акт > накладная > счёт-фактура > передаточный > счет > договор
+    if "упд" in first_lines or "универсальный передаточный" in first_lines:
+        logging.info(f"[Классификация] Найдено ключевое слово 'упд/универсальный передаточный' в первых строках, тип: упд")
+        return "упд"
     if "акт" in first_lines:
         logging.info(f"[Классификация] Найдено ключевое слово 'акт' в первых строках, тип: акт")
         return "акт"
     if "накладная" in first_lines:
         logging.info(f"[Классификация] Найдено ключевое слово 'накладная' в первых строках, тип: накладная")
         return "накладная"
+    if "счёт-фактура" in first_lines or "счет-фактура" in first_lines:
+        logging.info(f"[Классификация] Найдено ключевое слово 'счёт-фактура' в первых строках, тип: счёт-фактура")
+        return "счёт-фактура"
     if "передаточный" in first_lines:
         logging.info(f"[Классификация] Найдено ключевое слово 'передаточный' в первых строках, тип: передаточный")
         return "передаточный"
@@ -161,6 +217,22 @@ def merge_fields(base: dict, new: dict) -> dict:
     return result
 
 
+def determine_company_role(text: str) -> str:
+    """
+    Определяет роль нашей компании в документе.
+    Возвращает: 'поставщик', 'покупатель' или 'не указана'.
+    """
+    try:
+        prompt = ROLE_PROMPT_TEMPLATE.format(text=text[:MAX_CHARS], our_company=OUR_COMPANY)
+        logging.info(f"Prompt to LLM for role determination: {prompt[:200]}...")
+        response = query_ollama(prompt)
+        role = response.strip().split()[0].lower()
+        logging.info(f"Company role determined: {role}")
+        return role
+    except Exception as e:
+        logging.error(f"Error determining company role: {e}")
+        return "не указана"
+
 def extract_fields_from_text(doc_text: str) -> dict:
     """
     Извлекает ключевые поля из текста документа с помощью Ollama LLM (скользящее окно с overlap).
@@ -170,11 +242,15 @@ def extract_fields_from_text(doc_text: str) -> dict:
     clean = clean_text(doc_text)
     total_len = len(clean)
     result = {k: "-" for k in ["inn", "counterparty", "doc_number", "date", "amount", "subject", "contract_number"]}
+    
+    # Сначала определяем роль нашей компании
+    our_role = determine_company_role(clean[:MAX_CHARS])
+    
     windows = 0
     i = 0
     while i < total_len and windows < 10:
         window_text = clean[i:i+MAX_CHARS]
-        prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=window_text, our_company=OUR_COMPANY)
+        prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=window_text, our_company=OUR_COMPANY, our_role=our_role)
         logging.info(f"Prompt to LLM (window {windows+1}, chars {i}-{i+MAX_CHARS}): {prompt[:200]}...")
         try:
             response = query_ollama(prompt)
