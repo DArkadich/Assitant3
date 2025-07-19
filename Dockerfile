@@ -6,6 +6,7 @@ ENV PYTHONPATH=/app
 # Установим системные зависимости для OCR и работы с docx/xlsx
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
+    tesseract-ocr-rus \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
