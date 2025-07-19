@@ -11,19 +11,20 @@ logging.info(f"Наша компания: {OUR_COMPANY}")
 
 def query_ollama(prompt: str) -> str:
     """
-    Отправляет prompt в Ollama (endpoint /api/chat) и возвращает ответ LLM.
+    Отправляет prompt в Ollama (endpoint /api/generate) и возвращает ответ LLM.
     """
     response = requests.post(
-        f"{OLLAMA_HOST}/api/chat",
+        f"{OLLAMA_HOST}/api/generate",
         json={
             "model": OLLAMA_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
+            "prompt": prompt,
             "stream": False
         },
         timeout=600  # 10 минут для обработки больших промптов
     )
     response.raise_for_status()
-    return response.json()["message"]["content"]
+    # Для /api/generate ответ: {"response": "..."}
+    return response.json()["response"]
 
 # Prompt для определения роли компании в документе
 ROLE_PROMPT_TEMPLATE = (
