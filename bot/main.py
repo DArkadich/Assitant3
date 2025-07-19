@@ -9,7 +9,7 @@ from aiogram.utils import executor
 from aiogram.dispatcher.filters import ContentTypeFilter
 from dotenv import load_dotenv
 
-from extractor import extract_fields_from_text, process_file_with_classification
+from extractor import extract_fields_from_text, process_file_with_classification, classify_document_universal
 
 # Очередь задач
 task_queue = asyncio.Queue()
@@ -36,14 +36,22 @@ async def document_worker():
     while True:
         user_id, filename, file_path, ext = await task_queue.get()
         try:
+            # Сначала извлекаем текст
             text = process_file_with_classification(file_path)
             print(f"Text to LLM: {text[:200]}")
             logging.info(f"Text to LLM: {text[:200]}")
             if not text:
                 await bot.send_message(user_id, f"❌ Не удалось извлечь текст из документа {filename}.")
             else:
+                # Определяем тип документа
+                doc_type = classify_document_universal(text)
+                logging.info(f"Document type determined: {doc_type}")
+                
+                # Извлекаем поля
                 fields = extract_fields_from_text(text)
                 if fields:
+                    # Добавляем тип документа в результат
+                    fields['doc_type'] = doc_type
                     await bot.send_message(user_id, f"Извлечённые данные для '{filename}':\n<pre>{fields}</pre>", parse_mode="HTML")
                 else:
                     await bot.send_message(user_id, f"❌ Не удалось извлечь ключевые поля из документа {filename}.")
