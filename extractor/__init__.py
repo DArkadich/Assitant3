@@ -96,6 +96,8 @@ def extract_text_from_jpg(file_path):
 # --- Универсальная эвристика + LLM для классификации ---
 def classify_document_universal(text: str) -> str:
     first_lines = "\n".join(text.lower().splitlines()[:5])
+    logging.info(f"[Классификация] Первые 5 строк (lowercase): {first_lines}")
+    
     # Приоритет: акт > накладная > передаточный > счет > договор
     if "акт" in first_lines:
         logging.info(f"[Классификация] Найдено ключевое слово 'акт' в первых строках, тип: акт")
@@ -112,6 +114,8 @@ def classify_document_universal(text: str) -> str:
     if "договор" in first_lines:
         logging.info(f"[Классификация] Найдено ключевое слово 'договор' в первых строках, тип: договор")
         return "договор"
+    
+    logging.info(f"[Классификация] Ключевые слова не найдены, использую LLM")
     # Если ничего не найдено — спрашиваем LLM
     return classify_document_llm(text)
 
