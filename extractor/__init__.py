@@ -1,4 +1,4 @@
-from .ollama_client import query_ollama, EXTRACTION_PROMPT_TEMPLATE
+from .ollama_client import query_ollama, EXTRACTION_PROMPT_TEMPLATE, OUR_COMPANY
 import json
 import logging
 import re
@@ -170,7 +170,7 @@ def extract_fields_from_text(doc_text: str) -> dict:
     i = 0
     while i < total_len and windows < 10:
         window_text = clean[i:i+MAX_CHARS]
-        prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=window_text)
+        prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=window_text, our_company=OUR_COMPANY)
         logging.info(f"Prompt to LLM (window {windows+1}, chars {i}-{i+MAX_CHARS}): {prompt[:200]}...")
         try:
             response = query_ollama(prompt)

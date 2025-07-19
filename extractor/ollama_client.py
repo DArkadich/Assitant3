@@ -4,8 +4,10 @@ import logging
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
+OUR_COMPANY = os.getenv("OUR_COMPANY", "ООО \"ТОРМЕДТЕХ\"")
 
 logging.info(f"Используется модель Ollama: {OLLAMA_MODEL}")
+logging.info(f"Наша компания: {OUR_COMPANY}")
 
 def query_ollama(prompt: str) -> str:
     """
@@ -28,12 +30,15 @@ EXTRACTION_PROMPT_TEMPLATE = (
     """
     Извлеки из следующего текста ключевые поля документа:
     - ИНН
-    - Наименование контрагента
+    - Наименование контрагента (НЕ наша компания: {our_company})
     - Номер документа
     - Дата
     - Сумма
     - Предмет
     - Номер договора
+    
+    ВАЖНО: При поиске контрагента исключи нашу компанию "{our_company}". Ищи другие организации в документе.
+    
     Верни результат в формате JSON с ключами: inn, counterparty, doc_number, date, amount, subject, contract_number.
     Текст документа:
     """
