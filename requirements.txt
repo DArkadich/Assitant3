@@ -8,4 +8,7 @@ peewee
 python-dotenv
 Pillow
 opencv-python
-numpy 
+numpy
+pandas
+openpyxl
+psycopg2-binary 

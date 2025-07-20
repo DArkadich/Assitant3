@@ -1,5 +1,23 @@
 version: '3.8'
 services:
+  # База данных PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: doc_checker_postgres
+    environment:
+      POSTGRES_DB: doc_checker
+      POSTGRES_USER: doc_user
+      POSTGRES_PASSWORD: doc_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - doc_network
+    restart: unless-stopped
+
+  # Ollama для LLM
   ollama:
     image: ollama/ollama
     container_name: ollama
@@ -7,15 +25,33 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    networks:
+      - doc_network
+    restart: unless-stopped
 
+  # Основной бот
   doc_checker_bot:
     build: .
     container_name: doc_checker_bot
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgresql://doc_user:doc_password@postgres:5432/doc_checker
+      - OLLAMA_HOST=http://ollama:11434
     volumes:
       - ./data:/app/data
+      - ./reports:/app/reports
     depends_on:
+      - postgres
       - ollama
+    networks:
+      - doc_network
+    restart: unless-stopped
+
 volumes:
-  ollama_data: 
+  postgres_data:
+  ollama_data:
+
+networks:
+  doc_network:
+    driver: bridge 

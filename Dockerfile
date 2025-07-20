@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     libopencv-dev \
     python3-opencv \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
@@ -21,10 +22,11 @@ RUN pip install -r requirements.txt
 
 COPY bot/ ./bot/
 COPY extractor/ ./extractor/
+COPY storage/ ./storage/
+COPY analytics/ ./analytics/
 COPY classifier/ ./classifier/
 COPY legality_check/ ./legality_check/
 COPY rag_engine/ ./rag_engine/
-COPY analytics/ ./analytics/
 COPY closure_check/ ./closure_check/
 
 CMD ["python", "bot/main.py"] 
