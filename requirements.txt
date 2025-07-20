@@ -1,4 +1,4 @@
-aiogram==2.25.2
+aiogram>=3.0.0
 pdfplumber
 python-docx
 pytesseract
@@ -11,4 +11,5 @@ opencv-python
 numpy
 pandas
 openpyxl
-psycopg2-binary 
+psycopg2-binary
+requests 

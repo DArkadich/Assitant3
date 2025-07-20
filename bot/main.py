@@ -9,13 +9,10 @@ from aiogram.utils import executor
 from aiogram.dispatcher.filters import ContentTypeFilter
 from dotenv import load_dotenv
 
-from extractor import extract_fields_from_text, process_file_with_classification, classify_document_universal
 from storage import storage
 from analytics import Analytics
 from validator import validator
-
-# Очередь задач
-task_queue = asyncio.Queue()
+from document_processor import processor
 
 # Загрузка токена из .env (создайте .env с TELEGRAM_TOKEN=...)
 load_dotenv()
@@ -37,123 +34,30 @@ ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "docx", "xlsx", "zip"}
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Воркер для обработки очереди документов
-async def document_worker():
-    while True:
-        user_id, filename, file_path, ext = await task_queue.get()
-        try:
-            # Сначала извлекаем текст
-            text = process_file_with_classification(file_path)
-            print(f"Text to LLM: {text[:200]}")
-            logging.info(f"Text to LLM: {text[:200]}")
-            if not text:
-                await bot.send_message(user_id, f"❌ Не удалось извлечь текст из документа {filename}.")
-            else:
-                # Определяем тип документа
-                doc_type = classify_document_universal(text)
-                logging.info(f"Document type determined: {doc_type}")
-                
-                # Извлекаем поля
-                fields = extract_fields_from_text(text)
-                if fields:
-                    # Добавляем тип документа в результат и переупорядочиваем поля
-                    fields['doc_type'] = doc_type
-                    # Создаём новый словарь с нужным порядком полей
-                    ordered_fields = {
-                        'doc_type': fields['doc_type'],
-                        'counterparty': fields['counterparty'],
-                        'inn': fields['inn'],
-                        'doc_number': fields['doc_number'],
-                        'date': fields['date'],
-                        'amount': fields['amount'],
-                        'subject': fields['subject'],
-                        'contract_number': fields['contract_number']
-                    }
-                    
-                    # Валидируем извлеченные данные
-                    is_valid, errors, warnings = validator.validate_document_data(ordered_fields)
-                    
-                    # Формируем сообщение с результатами валидации
-                    validation_message = f"📋 **Результаты обработки документа '{filename}':**\n\n"
-                    
-                    if errors:
-                        validation_message += "❌ **Ошибки валидации:**\n"
-                        for error in errors:
-                            validation_message += f"• {error}\n"
-                        validation_message += "\n"
-                    
-                    if warnings:
-                        validation_message += "⚠️ **Предупреждения:**\n"
-                        for warning in warnings:
-                            validation_message += f"• {warning}\n"
-                        validation_message += "\n"
-                    
-                    if is_valid:
-                        validation_message += "✅ **Данные прошли валидацию**\n\n"
-                    else:
-                        validation_message += "❌ **Данные не прошли валидацию**\n\n"
-                    
-                    # Показываем извлеченные данные
-                    validation_message += "📄 **Извлеченные данные:**\n"
-                    for key, value in ordered_fields.items():
-                        validation_message += f"• **{key}:** {value}\n"
-                    
-                    await bot.send_message(user_id, validation_message, parse_mode="Markdown")
-                    
-                    # Сохраняем документ только если данные прошли валидацию
-                    if is_valid:
-                        try:
-                            doc_id = storage.save_document(file_path, ordered_fields, user_id)
-                            await bot.send_message(user_id, f"✅ Документ успешно сохранён в базе (ID: {doc_id})")
-                        except Exception as storage_error:
-                            logging.error(f"Ошибка сохранения документа: {storage_error}")
-                            await bot.send_message(user_id, f"❌ Ошибка сохранения в базу данных: {storage_error}")
-                    else:
-                        await bot.send_message(user_id, "❌ Документ не сохранён из-за ошибок валидации. Исправьте данные и попробуйте снова.")
-                else:
-                    await bot.send_message(user_id, f"❌ Не удалось извлечь ключевые поля из документа {filename}.")
-        except Exception as e:
-            logging.error(f"Ошибка при обработке документа {filename}: {e}", exc_info=True)
-            
-            # Формируем понятное сообщение об ошибке
-            error_message = f"❌ **Ошибка при обработке документа '{filename}':**\n\n"
-            
-            if "timeout" in str(e).lower():
-                error_message += "⏰ **Причина:** Превышено время ожидания ответа от сервера\n\n"
-                error_message += "**Решение:** Попробуйте отправить документ позже или разбейте его на части"
-            elif "connection" in str(e).lower():
-                error_message += "🌐 **Причина:** Проблема с подключением к серверу\n\n"
-                error_message += "**Решение:** Проверьте интернет-соединение и попробуйте снова"
-            elif "memory" in str(e).lower():
-                error_message += "💾 **Причина:** Недостаточно памяти для обработки документа\n\n"
-                error_message += "**Решение:** Попробуйте отправить документ меньшего размера"
-            else:
-                error_message += f"🔧 **Причина:** {str(e)}\n\n"
-                error_message += "**Решение:** Обратитесь к администратору системы"
-            
-            await bot.send_message(user_id, error_message, parse_mode="Markdown")
-        finally:
-            # Очищаем временный файл
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except Exception as cleanup_error:
-                logging.warning(f"Не удалось удалить временный файл {file_path}: {cleanup_error}")
-            
-            task_queue.task_done()
+# Callback для уведомлений от процессора
+async def notification_callback(user_id: int, message: str):
+    """Отправляет уведомления пользователю"""
+    try:
+        await bot.send_message(user_id, message, parse_mode="Markdown")
+    except Exception as e:
+        logging.error(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
 
 @dp.message_handler(content_types=types.ContentType.DOCUMENT)
 async def handle_document(message: Message):
     document = message.document
     filename = document.file_name
+    
     if not allowed_file(filename):
         await message.reply("❌ Недопустимый тип файла. Разрешены: PDF, JPG, DOCX, XLSX, ZIP.")
         return
+    
     file_path = os.path.join(TEMP_DIR, filename)
     await document.download(destination_file=file_path)
-    ext = filename.rsplit(".", 1)[-1].lower()
-    await message.reply(f"✅ Документ '{filename}' получен и поставлен в очередь на обработку.")
-    await task_queue.put((message.from_user.id, filename, file_path, ext))
+    
+    # Добавляем задачу в асинхронный процессор
+    task_id = await processor.add_task(message.from_user.id, filename, file_path)
+    
+    await message.reply(f"✅ Документ '{filename}' получен и добавлен в очередь обработки (ID: {task_id[:8]})")
 
 @dp.message_handler(content_types=types.ContentType.PHOTO)
 async def handle_photo(message: Message):
@@ -163,8 +67,11 @@ async def handle_photo(message: Message):
     filename = f"photo_{file_id}.jpg"
     file_path = os.path.join(TEMP_DIR, filename)
     await photo.download(destination_file=file_path)
-    await message.reply(f"✅ Фото получено и поставлено в очередь на обработку.")
-    await task_queue.put((message.from_user.id, filename, file_path, "jpg"))
+    
+    # Добавляем задачу в асинхронный процессор
+    task_id = await processor.add_task(message.from_user.id, filename, file_path)
+    
+    await message.reply(f"✅ Фото получено и добавлено в очередь обработки (ID: {task_id[:8]})")
 
 @dp.message_handler(commands=["start", "help"])
 async def send_welcome(message: Message):
@@ -184,6 +91,8 @@ async def send_welcome(message: Message):
 **Система:**
 🔧 `/status` - статус системы и очереди
 🔧 `/validate <текст>` - проверить валидацию данных
+🔧 `/tasks` - мои задачи обработки
+🔧 `/task <id>` - статус конкретной задачи
 
 **Примеры:**
 `/report ООО Рога и Копыта`
@@ -348,8 +257,8 @@ async def handle_chain(message: Message):
 async def handle_status(message: Message):
     """Обработчик команды статуса системы"""
     try:
-        # Получаем статистику очереди
-        queue_size = task_queue.qsize()
+        # Получаем статистику процессора
+        processor_stats = processor.get_stats()
         
         # Проверяем подключение к базе данных
         try:
@@ -370,9 +279,18 @@ async def handle_status(message: Message):
         status_message = f"""
 🔧 **Статус системы**
 
-📊 **Очередь обработки:**
-• Задач в очереди: {queue_size}
-• Статус: {'🟡 Занята' if queue_size > 0 else '🟢 Свободна'}
+📊 **Процессор документов:**
+• Активных задач: {processor_stats['active_tasks']}
+• Задач в очереди: {processor_stats['queue_size']}
+• Завершенных задач: {processor_stats['completed_tasks']}
+• Воркеров: {processor_stats['workers']}
+• Статус: {'🟡 Занята' if processor_stats['queue_size'] > 0 or processor_stats['active_tasks'] > 0 else '🟢 Свободна'}
+
+📈 **Статистика:**
+• Всего обработано: {processor_stats['total_processed']}
+• Ошибок обработки: {processor_stats['total_failed']}
+• Ошибок валидации: {processor_stats['total_validation_failed']}
+• Среднее время: {processor_stats['average_processing_time']:.1f} сек
 
 🗄️ **База данных:**
 • Статус: {db_status}
@@ -433,9 +351,140 @@ async def handle_validate(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при валидации: {e}")
 
+@dp.message_handler(commands=["tasks"])
+async def handle_tasks(message: Message):
+    """Обработчик команды списка задач пользователя"""
+    try:
+        tasks = await processor.get_user_tasks(message.from_user.id)
+        
+        if not tasks:
+            await message.reply("📋 У вас пока нет задач обработки документов.")
+            return
+        
+        response = f"📋 **Ваши задачи обработки ({len(tasks)}):**\n\n"
+        
+        for i, task in enumerate(tasks[:10], 1):  # Показываем последние 10
+            status_emoji = {
+                'pending': '⏳',
+                'processing': '⚙️',
+                'completed': '✅',
+                'failed': '❌',
+                'validation_failed': '⚠️'
+            }.get(task.status.value, '❓')
+            
+            response += f"{i}. {status_emoji} **{task.filename}** (ID: {task.id[:8]})\n"
+            response += f"   Статус: {task.status.value}\n"
+            response += f"   Создано: {task.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            
+            if task.completed_at:
+                response += f"   Завершено: {task.completed_at.strftime('%d.%m.%Y %H:%M')}\n"
+            
+            if task.error:
+                response += f"   Ошибка: {task.error[:50]}...\n"
+            
+            response += "\n"
+        
+        if len(tasks) > 10:
+            response += f"... и еще {len(tasks) - 10} задач"
+        
+        await message.reply(response, parse_mode="Markdown")
+    except Exception as e:
+        await message.reply(f"❌ Ошибка при получении списка задач: {e}")
+
+@dp.message_handler(commands=["task"])
+async def handle_task_status(message: Message):
+    """Обработчик команды статуса конкретной задачи"""
+    try:
+        task_id = message.get_args().strip()
+        if not task_id:
+            await message.reply("❌ Укажите ID задачи: `/task abc12345`")
+            return
+        
+        # Ищем задачу по ID (полному или короткому)
+        task = None
+        if len(task_id) == 8:
+            # Ищем по короткому ID
+            for t in list(processor.active_tasks.values()) + list(processor.completed_tasks.values()):
+                if t.id.startswith(task_id):
+                    task = t
+                    break
+        else:
+            # Ищем по полному ID
+            task = await processor.get_task_status(task_id)
+        
+        if not task:
+            await message.reply(f"❌ Задача с ID '{task_id}' не найдена")
+            return
+        
+        # Проверяем, что задача принадлежит пользователю
+        if task.user_id != message.from_user.id:
+            await message.reply("❌ У вас нет доступа к этой задаче")
+            return
+        
+        status_emoji = {
+            'pending': '⏳',
+            'processing': '⚙️',
+            'completed': '✅',
+            'failed': '❌',
+            'validation_failed': '⚠️'
+        }.get(task.status.value, '❓')
+        
+        response = f"""
+{status_emoji} **Задача: {task.filename}**
+
+🆔 **ID:** {task.id}
+📊 **Статус:** {task.status.value}
+📅 **Создано:** {task.created_at.strftime('%d.%m.%Y %H:%M:%S')}
+        """
+        
+        if task.started_at:
+            response += f"⚙️ **Начато:** {task.started_at.strftime('%d.%m.%Y %H:%M:%S')}\n"
+        
+        if task.completed_at:
+            response += f"✅ **Завершено:** {task.completed_at.strftime('%d.%m.%Y %H:%M:%S')}\n"
+            if task.started_at:
+                processing_time = (task.completed_at - task.started_at).total_seconds()
+                response += f"⏱️ **Время обработки:** {processing_time:.1f} сек\n"
+        
+        if task.error:
+            response += f"\n❌ **Ошибка:** {task.error}\n"
+        
+        if task.validation_errors:
+            response += f"\n⚠️ **Ошибки валидации:**\n"
+            for error in task.validation_errors:
+                response += f"• {error}\n"
+        
+        if task.validation_warnings:
+            response += f"\n⚠️ **Предупреждения:**\n"
+            for warning in task.validation_warnings:
+                response += f"• {warning}\n"
+        
+        if task.result and task.status.value == 'completed':
+            response += f"\n📄 **Результат:**\n"
+            response += f"• ID в базе: {task.result.get('doc_id')}\n"
+            response += f"• Время обработки: {task.result.get('processing_time', 0):.1f} сек\n"
+        
+        await message.reply(response, parse_mode="Markdown")
+    except Exception as e:
+        await message.reply(f"❌ Ошибка при получении статуса задачи: {e}")
+
+async def setup_processor():
+    """Настройка и запуск процессора документов"""
+    # Устанавливаем callback для уведомлений
+    processor.set_notification_callback(notification_callback)
+    
+    # Запускаем процессор
+    await processor.start()
+    
+    logging.info("DocumentProcessor настроен и запущен")
+
 def main():
     loop = asyncio.get_event_loop()
-    loop.create_task(document_worker())
+    
+    # Запускаем процессор
+    loop.create_task(setup_processor())
+    
+    # Запускаем бота
     executor.start_polling(dp, skip_updates=True, loop=loop)
 
 if __name__ == "__main__":
