@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from contextlib import contextmanager
+import re
 
 class PostgresStorage:
     def __init__(self, base_path: str = "data/documents", db_url: str = None):
@@ -55,6 +56,56 @@ class PostgresStorage:
             logging.error(f"Ошибка инициализации базы данных: {e}")
             raise
     
+    def _parse_russian_date(self, date_str: str) -> str:
+        """
+        Парсит русскую дату в формат YYYY-MM-DD для PostgreSQL
+        
+        Примеры:
+        - "23 июня 2025 г." -> "2025-06-23"
+        - "15 января 2024 года" -> "2024-01-15"
+        - "2024-12-31" -> "2024-12-31" (уже в правильном формате)
+        """
+        if not date_str:
+            return None
+        
+        # Если дата уже в формате YYYY-MM-DD, возвращаем как есть
+        if re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+            return date_str
+        
+        # Словарь месяцев
+        months = {
+            'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
+            'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
+            'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
+        }
+        
+        # Паттерны для парсинга русских дат
+        patterns = [
+            r'(\d{1,2})\s+(\w+)\s+(\d{4})\s*г?\.?',  # "23 июня 2025 г."
+            r'(\d{1,2})\s+(\w+)\s+(\d{4})\s+года',   # "15 января 2024 года"
+            r'(\d{1,2})\.(\d{1,2})\.(\d{4})',        # "23.06.2025"
+            r'(\d{1,2})/(\d{1,2})/(\d{4})',          # "23/06/2025"
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, date_str)
+            if match:
+                if len(match.groups()) == 3:
+                    day, month, year = match.groups()
+                    
+                    # Если месяц - число
+                    if month.isdigit():
+                        return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                    
+                    # Если месяц - русское название
+                    month_lower = month.lower()
+                    if month_lower in months:
+                        return f"{year}-{months[month_lower]}-{day.zfill(2)}"
+        
+        # Если не удалось распарсить, возвращаем None
+        logging.warning(f"Не удалось распарсить дату: {date_str}")
+        return None
+    
     def save_document(self, file_path: str, doc_data: Dict, telegram_user_id: int) -> int:
         """
         Сохраняет документ в соответствующую папку и записывает в БД
@@ -84,6 +135,9 @@ class PostgresStorage:
         # Сохраняем в базу данных
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
+                # Парсим дату в правильный формат
+                parsed_date = self._parse_russian_date(doc_data.get('date'))
+                
                 # Вставляем документ
                 cursor.execute('''
                     INSERT INTO documents (
@@ -94,7 +148,7 @@ class PostgresStorage:
                     RETURNING id
                 ''', (
                     new_filename, original_filename, doc_type, counterparty,
-                    doc_data.get('inn'), doc_data.get('doc_number'), doc_data.get('date'),
+                    doc_data.get('inn'), doc_data.get('doc_number'), parsed_date,
                     doc_data.get('amount'), doc_data.get('subject'), doc_data.get('contract_number'),
                     str(target_path), telegram_user_id
                 ))
@@ -103,15 +157,15 @@ class PostgresStorage:
                 
                 # Обновляем статистику контрагента
                 self._update_counterparty_stats(cursor, counterparty, doc_data.get('inn'), 
-                                               doc_data.get('amount'), doc_data.get('date'))
+                                               doc_data.get('amount'), parsed_date)
                 
                 # Если это договор, создаём новую бизнес-цепочку
                 if doc_type == 'договор':
-                    self._create_business_chain(cursor, doc_id, doc_data)
+                    self._create_business_chain(cursor, doc_id, doc_data, parsed_date)
                 
                 # Если это счёт или закрывающий документ, связываем с существующей цепочкой
                 elif doc_type in ['счет', 'акт', 'накладная', 'счет-фактура', 'упд']:
-                    self._link_to_business_chain(cursor, doc_id, doc_data)
+                    self._link_to_business_chain(cursor, doc_id, doc_data, parsed_date)
                 
                 conn.commit()
         
@@ -151,7 +205,7 @@ class PostgresStorage:
                 VALUES (%s, %s, %s, %s, %s, 1)
             ''', (counterparty, inn, date, date, amount or 0))
     
-    def _create_business_chain(self, cursor, doc_id: int, doc_data: Dict):
+    def _create_business_chain(self, cursor, doc_id: int, doc_data: Dict, parsed_date: str):
         """Создаёт новую бизнес-цепочку для договора"""
         contract_number = doc_data.get('contract_number')
         counterparty = doc_data.get('counterparty')
@@ -170,9 +224,9 @@ class PostgresStorage:
             cursor.execute('''
                 INSERT INTO chain_links (chain_id, document_id, link_type, amount, date)
                 VALUES (%s, %s, %s, %s, %s)
-            ''', (chain_id, doc_id, 'contract', amount, doc_data.get('date')))
+            ''', (chain_id, doc_id, 'contract', amount, parsed_date))
     
-    def _link_to_business_chain(self, cursor, doc_id: int, doc_data: Dict):
+    def _link_to_business_chain(self, cursor, doc_id: int, doc_data: Dict, parsed_date: str):
         """Связывает документ с существующей бизнес-цепочкой"""
         contract_number = doc_data.get('contract_number')
         if not contract_number:
@@ -194,7 +248,7 @@ class PostgresStorage:
             cursor.execute('''
                 INSERT INTO chain_links (chain_id, document_id, link_type, amount, date)
                 VALUES (%s, %s, %s, %s, %s)
-            ''', (chain_id, doc_id, link_type, amount, doc_data.get('date')))
+            ''', (chain_id, doc_id, link_type, amount, parsed_date))
             
             # Обновляем статистику цепочки
             if link_type == 'invoice':
