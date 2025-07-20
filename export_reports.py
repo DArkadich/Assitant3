@@ -6,7 +6,7 @@
 import argparse
 import os
 from datetime import datetime
-from analytics import analytics
+from analytics import Analytics
 from storage import storage
 
 def main():
@@ -21,6 +21,9 @@ def main():
     parser.add_argument('--month', type=int, help='Месяц для месячного отчёта')
     
     args = parser.parse_args()
+    
+    # Создаём экземпляр аналитики
+    analytics = Analytics()
     
     # Создаём папку для отчётов
     os.makedirs(args.output, exist_ok=True)

@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 from extractor import extract_fields_from_text, process_file_with_classification, classify_document_universal
 from storage import storage
-from analytics import analytics
+from analytics import Analytics
 
 # Очередь задач
 task_queue = asyncio.Queue()
@@ -19,6 +19,9 @@ task_queue = asyncio.Queue()
 # Загрузка токена из .env (создайте .env с TELEGRAM_TOKEN=...)
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+# Создаём экземпляр аналитики
+analytics = Analytics()
 
 # Папка для временного хранения документов
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "temp")

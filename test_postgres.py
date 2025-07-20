@@ -8,7 +8,7 @@ import tempfile
 import json
 from datetime import datetime
 from storage.postgres_storage import postgres_storage
-from analytics import analytics
+from analytics import Analytics
 
 def create_test_document(content, filename):
     """Создаёт тестовый файл"""
@@ -86,6 +86,9 @@ def test_analytics():
     print("\n📊 Тестирование системы аналитики...")
     
     try:
+        # Создаём экземпляр аналитики
+        analytics = Analytics()
+        
         # Тест отчёта по контрагентам
         report = analytics.generate_counterparty_report()
         print(f"✅ Отчёт по контрагентам: {report['summary']['total_counterparties']} контрагентов")
