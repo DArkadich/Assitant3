@@ -106,6 +106,52 @@ class PostgresStorage:
         logging.warning(f"Не удалось распарсить дату: {date_str}")
         return None
     
+    def _parse_russian_amount(self, amount_str: str) -> float:
+        """
+        Парсит русскую сумму в числовое значение для PostgreSQL
+        
+        Примеры:
+        - "1 570 134,00 руб." -> 1570134.00
+        - "1,234.56 руб." -> 1234.56
+        - "1234.56" -> 1234.56
+        - "1 234 567" -> 1234567.0
+        """
+        if not amount_str:
+            return 0.0
+        
+        # Если уже число в правильном формате, возвращаем как есть
+        try:
+            return float(amount_str)
+        except ValueError:
+            pass
+        
+        # Убираем валюту и лишние символы, оставляем только цифры, пробелы, запятые и точки
+        amount_clean = re.sub(r'[^\d\s,\.]', '', amount_str).strip()
+        # Убираем точки в конце (часто это артефакты от "руб.")
+        amount_clean = amount_clean.rstrip('.')
+        
+        # Если пустая строка после очистки
+        if not amount_clean:
+            return 0.0
+        
+        try:
+            # Определяем формат по наличию точек и запятых
+            if '.' in amount_clean and ',' in amount_clean:
+                # Формат "1,234.56" - запятая как разделитель тысяч, точка как десятичный
+                amount_clean = amount_clean.replace(',', '')
+            elif ',' in amount_clean and '.' not in amount_clean:
+                # Формат "1 570 134,00" - запятая как десятичный разделитель
+                amount_clean = amount_clean.replace(' ', '').replace(',', '.')
+            else:
+                # Простой формат, убираем пробелы
+                amount_clean = amount_clean.replace(' ', '')
+            
+            # Парсим как float
+            return float(amount_clean)
+        except ValueError:
+            logging.warning(f"Не удалось распарсить сумму: {amount_str}")
+            return 0.0
+    
     def save_document(self, file_path: str, doc_data: Dict, telegram_user_id: int) -> int:
         """
         Сохраняет документ в соответствующую папку и записывает в БД
@@ -135,8 +181,9 @@ class PostgresStorage:
         # Сохраняем в базу данных
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
-                # Парсим дату в правильный формат
+                # Парсим дату и сумму в правильный формат
                 parsed_date = self._parse_russian_date(doc_data.get('date'))
+                parsed_amount = self._parse_russian_amount(doc_data.get('amount'))
                 
                 # Вставляем документ
                 cursor.execute('''
@@ -149,7 +196,7 @@ class PostgresStorage:
                 ''', (
                     new_filename, original_filename, doc_type, counterparty,
                     doc_data.get('inn'), doc_data.get('doc_number'), parsed_date,
-                    doc_data.get('amount'), doc_data.get('subject'), doc_data.get('contract_number'),
+                    parsed_amount, doc_data.get('subject'), doc_data.get('contract_number'),
                     str(target_path), telegram_user_id
                 ))
                 
@@ -157,15 +204,15 @@ class PostgresStorage:
                 
                 # Обновляем статистику контрагента
                 self._update_counterparty_stats(cursor, counterparty, doc_data.get('inn'), 
-                                               doc_data.get('amount'), parsed_date)
+                                               parsed_amount, parsed_date)
                 
                 # Если это договор, создаём новую бизнес-цепочку
                 if doc_type == 'договор':
-                    self._create_business_chain(cursor, doc_id, doc_data, parsed_date)
+                    self._create_business_chain(cursor, doc_id, doc_data, parsed_date, parsed_amount)
                 
                 # Если это счёт или закрывающий документ, связываем с существующей цепочкой
                 elif doc_type in ['счет', 'акт', 'накладная', 'счет-фактура', 'упд']:
-                    self._link_to_business_chain(cursor, doc_id, doc_data, parsed_date)
+                    self._link_to_business_chain(cursor, doc_id, doc_data, parsed_date, parsed_amount)
                 
                 conn.commit()
         
@@ -205,18 +252,17 @@ class PostgresStorage:
                 VALUES (%s, %s, %s, %s, %s, 1)
             ''', (counterparty, inn, date, date, amount or 0))
     
-    def _create_business_chain(self, cursor, doc_id: int, doc_data: Dict, parsed_date: str):
+    def _create_business_chain(self, cursor, doc_id: int, doc_data: Dict, parsed_date: str, parsed_amount: float):
         """Создаёт новую бизнес-цепочку для договора"""
         contract_number = doc_data.get('contract_number')
         counterparty = doc_data.get('counterparty')
-        amount = doc_data.get('amount', 0)
         
         if contract_number and counterparty:
             cursor.execute('''
                 INSERT INTO business_chains (contract_number, contract_doc_id, counterparty, total_amount)
                 VALUES (%s, %s, %s, %s)
                 RETURNING id
-            ''', (contract_number, doc_id, counterparty, amount))
+            ''', (contract_number, doc_id, counterparty, parsed_amount))
             
             chain_id = cursor.fetchone()[0]
             
@@ -224,9 +270,9 @@ class PostgresStorage:
             cursor.execute('''
                 INSERT INTO chain_links (chain_id, document_id, link_type, amount, date)
                 VALUES (%s, %s, %s, %s, %s)
-            ''', (chain_id, doc_id, 'contract', amount, parsed_date))
+            ''', (chain_id, doc_id, 'contract', parsed_amount, parsed_date))
     
-    def _link_to_business_chain(self, cursor, doc_id: int, doc_data: Dict, parsed_date: str):
+    def _link_to_business_chain(self, cursor, doc_id: int, doc_data: Dict, parsed_date: str, parsed_amount: float):
         """Связывает документ с существующей бизнес-цепочкой"""
         contract_number = doc_data.get('contract_number')
         if not contract_number:
@@ -239,7 +285,6 @@ class PostgresStorage:
         if chain:
             chain_id = chain[0]
             doc_type = doc_data.get('doc_type')
-            amount = doc_data.get('amount', 0)
             
             # Определяем тип связи
             link_type = 'invoice' if doc_type == 'счет' else 'closing'
@@ -248,7 +293,7 @@ class PostgresStorage:
             cursor.execute('''
                 INSERT INTO chain_links (chain_id, document_id, link_type, amount, date)
                 VALUES (%s, %s, %s, %s, %s)
-            ''', (chain_id, doc_id, link_type, amount, parsed_date))
+            ''', (chain_id, doc_id, link_type, parsed_amount, parsed_date))
             
             # Обновляем статистику цепочки
             if link_type == 'invoice':
