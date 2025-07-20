@@ -15,7 +15,6 @@ __pycache__/
 *.log
 data/
 uploads/
-analytics/
 closure_check/
 rag_engine/
 contracts_db/
