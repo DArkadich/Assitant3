@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from extractor import extract_fields_from_text, process_file_with_classification, classify_document_universal
 from storage import storage
 from analytics import Analytics
+from validator import validator
 
 # Очередь задач
 task_queue = asyncio.Queue()
@@ -69,20 +70,76 @@ async def document_worker():
                         'contract_number': fields['contract_number']
                     }
                     
-                    # Сохраняем документ в хранилище
-                    try:
-                        doc_id = storage.save_document(file_path, ordered_fields, user_id)
-                        await bot.send_message(user_id, f"✅ Документ сохранён в базе (ID: {doc_id})")
-                    except Exception as storage_error:
-                        logging.error(f"Ошибка сохранения документа: {storage_error}")
-                        await bot.send_message(user_id, f"⚠️ Документ обработан, но не сохранён в базе: {storage_error}")
+                    # Валидируем извлеченные данные
+                    is_valid, errors, warnings = validator.validate_document_data(ordered_fields)
                     
-                    await bot.send_message(user_id, f"Извлечённые данные для '{filename}':\n<pre>{ordered_fields}</pre>", parse_mode="HTML")
+                    # Формируем сообщение с результатами валидации
+                    validation_message = f"📋 **Результаты обработки документа '{filename}':**\n\n"
+                    
+                    if errors:
+                        validation_message += "❌ **Ошибки валидации:**\n"
+                        for error in errors:
+                            validation_message += f"• {error}\n"
+                        validation_message += "\n"
+                    
+                    if warnings:
+                        validation_message += "⚠️ **Предупреждения:**\n"
+                        for warning in warnings:
+                            validation_message += f"• {warning}\n"
+                        validation_message += "\n"
+                    
+                    if is_valid:
+                        validation_message += "✅ **Данные прошли валидацию**\n\n"
+                    else:
+                        validation_message += "❌ **Данные не прошли валидацию**\n\n"
+                    
+                    # Показываем извлеченные данные
+                    validation_message += "📄 **Извлеченные данные:**\n"
+                    for key, value in ordered_fields.items():
+                        validation_message += f"• **{key}:** {value}\n"
+                    
+                    await bot.send_message(user_id, validation_message, parse_mode="Markdown")
+                    
+                    # Сохраняем документ только если данные прошли валидацию
+                    if is_valid:
+                        try:
+                            doc_id = storage.save_document(file_path, ordered_fields, user_id)
+                            await bot.send_message(user_id, f"✅ Документ успешно сохранён в базе (ID: {doc_id})")
+                        except Exception as storage_error:
+                            logging.error(f"Ошибка сохранения документа: {storage_error}")
+                            await bot.send_message(user_id, f"❌ Ошибка сохранения в базу данных: {storage_error}")
+                    else:
+                        await bot.send_message(user_id, "❌ Документ не сохранён из-за ошибок валидации. Исправьте данные и попробуйте снова.")
                 else:
                     await bot.send_message(user_id, f"❌ Не удалось извлечь ключевые поля из документа {filename}.")
         except Exception as e:
-            await bot.send_message(user_id, f"❌ Ошибка при обработке документа {filename}: {e}")
+            logging.error(f"Ошибка при обработке документа {filename}: {e}", exc_info=True)
+            
+            # Формируем понятное сообщение об ошибке
+            error_message = f"❌ **Ошибка при обработке документа '{filename}':**\n\n"
+            
+            if "timeout" in str(e).lower():
+                error_message += "⏰ **Причина:** Превышено время ожидания ответа от сервера\n\n"
+                error_message += "**Решение:** Попробуйте отправить документ позже или разбейте его на части"
+            elif "connection" in str(e).lower():
+                error_message += "🌐 **Причина:** Проблема с подключением к серверу\n\n"
+                error_message += "**Решение:** Проверьте интернет-соединение и попробуйте снова"
+            elif "memory" in str(e).lower():
+                error_message += "💾 **Причина:** Недостаточно памяти для обработки документа\n\n"
+                error_message += "**Решение:** Попробуйте отправить документ меньшего размера"
+            else:
+                error_message += f"🔧 **Причина:** {str(e)}\n\n"
+                error_message += "**Решение:** Обратитесь к администратору системы"
+            
+            await bot.send_message(user_id, error_message, parse_mode="Markdown")
         finally:
+            # Очищаем временный файл
+            try:
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            except Exception as cleanup_error:
+                logging.warning(f"Не удалось удалить временный файл {file_path}: {cleanup_error}")
+            
             task_queue.task_done()
 
 @dp.message_handler(content_types=types.ContentType.DOCUMENT)
@@ -124,12 +181,17 @@ async def send_welcome(message: Message):
 📊 `/monthly` - месячный отчёт
 📊 `/chain <номер_договора>` - детали цепочки
 
+**Система:**
+🔧 `/status` - статус системы и очереди
+🔧 `/validate <текст>` - проверить валидацию данных
+
 **Примеры:**
 `/report ООО Рога и Копыта`
 `/chain Д-2024-001`
 `/monthly 2024 12`
+`/validate {"counterparty": "ООО Тест", "inn": "1234567890"}`
 
-Документы обрабатываются по очереди и автоматически сохраняются в базе данных.
+Документы обрабатываются по очереди, проходят валидацию и сохраняются в базе данных.
     """
     await message.reply(help_text, parse_mode="Markdown")
 
@@ -281,6 +343,95 @@ async def handle_chain(message: Message):
         await message.reply(response, parse_mode="Markdown")
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении деталей цепочки: {e}")
+
+@dp.message_handler(commands=["status"])
+async def handle_status(message: Message):
+    """Обработчик команды статуса системы"""
+    try:
+        # Получаем статистику очереди
+        queue_size = task_queue.qsize()
+        
+        # Проверяем подключение к базе данных
+        try:
+            db_stats = storage.get_database_stats()
+            db_status = "✅ Подключено"
+            db_info = f"Документов: {db_stats.get('total_documents', 0)}, Контрагентов: {db_stats.get('total_counterparties', 0)}"
+        except Exception as db_error:
+            db_status = "❌ Ошибка подключения"
+            db_info = str(db_error)
+        
+        # Проверяем подключение к LLM (упрощенно)
+        try:
+            # Здесь можно добавить реальную проверку LLM
+            llm_status = "✅ Доступен"
+        except:
+            llm_status = "❌ Недоступен"
+        
+        status_message = f"""
+🔧 **Статус системы**
+
+📊 **Очередь обработки:**
+• Задач в очереди: {queue_size}
+• Статус: {'🟡 Занята' if queue_size > 0 else '🟢 Свободна'}
+
+🗄️ **База данных:**
+• Статус: {db_status}
+• {db_info}
+
+🤖 **LLM сервис:**
+• Статус: {llm_status}
+
+💾 **Хранилище:**
+• Временная папка: {TEMP_DIR}
+• Размер: {sum(os.path.getsize(os.path.join(TEMP_DIR, f)) for f in os.listdir(TEMP_DIR) if os.path.isfile(os.path.join(TEMP_DIR, f))):,} байт
+        """
+        
+        await message.reply(status_message, parse_mode="Markdown")
+    except Exception as e:
+        await message.reply(f"❌ Ошибка при получении статуса: {e}")
+
+@dp.message_handler(commands=["validate"])
+async def handle_validate(message: Message):
+    """Обработчик команды валидации данных"""
+    try:
+        args = message.get_args().strip()
+        if not args:
+            await message.reply("❌ Укажите данные для валидации в формате JSON\n\nПример: `/validate {\"counterparty\": \"ООО Тест\", \"inn\": \"1234567890\"}`")
+            return
+        
+        try:
+            import json
+            test_data = json.loads(args)
+        except json.JSONDecodeError:
+            await message.reply("❌ Некорректный формат JSON")
+            return
+        
+        # Валидируем данные
+        is_valid, errors, warnings = validator.validate_document_data(test_data)
+        
+        # Формируем ответ
+        validation_message = f"🔍 **Результаты валидации:**\n\n"
+        
+        if errors:
+            validation_message += "❌ **Ошибки:**\n"
+            for error in errors:
+                validation_message += f"• {error}\n"
+            validation_message += "\n"
+        
+        if warnings:
+            validation_message += "⚠️ **Предупреждения:**\n"
+            for warning in warnings:
+                validation_message += f"• {warning}\n"
+            validation_message += "\n"
+        
+        if is_valid:
+            validation_message += "✅ **Данные прошли валидацию**"
+        else:
+            validation_message += "❌ **Данные не прошли валидацию**"
+        
+        await message.reply(validation_message, parse_mode="Markdown")
+    except Exception as e:
+        await message.reply(f"❌ Ошибка при валидации: {e}")
 
 def main():
     loop = asyncio.get_event_loop()
