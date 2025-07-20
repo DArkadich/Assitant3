@@ -20,13 +20,6 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY bot/ ./bot/
-COPY extractor/ ./extractor/
-COPY storage/ ./storage/
-COPY analytics/ ./analytics/
-COPY classifier/ ./classifier/
-COPY legality_check/ ./legality_check/
-COPY rag_engine/ ./rag_engine/
-COPY closure_check/ ./closure_check/
+COPY . .
 
 CMD ["python", "bot/main.py"] 
