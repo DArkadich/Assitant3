@@ -13,3 +13,6 @@ pandas
 openpyxl
 psycopg2-binary
 requests 
+sentence-transformers
+faiss-cpu
+torch 

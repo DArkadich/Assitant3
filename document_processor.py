@@ -11,6 +11,7 @@ import json
 from extractor import extract_fields_from_text, process_file_with_classification, classify_document_universal
 from storage import storage
 from validator import validator
+from rag import rag_index
 
 class ProcessingStatus(Enum):
     """Статусы обработки документа"""
@@ -189,7 +190,10 @@ class DocumentProcessor:
             doc_type = classify_document_universal(text)
             
             # Извлекаем поля
-            fields = extract_fields_from_text(text)
+            rag_results = rag_index.search(text, top_k=3)
+            rag_context = [doc['text'] for doc in rag_results]
+            fields = extract_fields_from_text(text, rag_context=rag_context)
+            
             if not fields:
                 raise Exception("Не удалось извлечь ключевые поля из документа")
             
@@ -233,6 +237,13 @@ class DocumentProcessor:
             
             # Сохраняем документ в базу данных
             doc_id = storage.save_document(task.file_path, ordered_fields, task.user_id)
+            
+            # Индексируем документ
+            try:
+                doc_text = " ".join(str(v) for v in ordered_fields.values() if v)
+                rag_index.add_document(str(doc_id), doc_text, meta=ordered_fields)
+            except Exception as e:
+                logging.warning(f"RAG indexing failed: {e}")
             
             # Завершаем задачу
             task.status = ProcessingStatus.COMPLETED

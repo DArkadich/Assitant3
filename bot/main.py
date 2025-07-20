@@ -13,6 +13,7 @@ from storage import storage
 from analytics import Analytics
 from validator import validator
 from document_processor import processor
+from rag import rag_index
 
 # Загрузка токена из .env (создайте .env с TELEGRAM_TOKEN=...)
 load_dotenv()
@@ -467,6 +468,27 @@ async def handle_task_status(message: Message):
         await message.reply(response, parse_mode="Markdown")
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении статуса задачи: {e}")
+
+@dp.message_handler(commands=["find"])
+async def handle_find(message: Message):
+    query = message.get_args().strip()
+    if not query:
+        await message.reply("❌ Укажите текст для поиска: `/find <текст или номер>`")
+        return
+    try:
+        results = rag_index.search(query, top_k=5)
+        if not results:
+            await message.reply("❌ Похожих документов не найдено.")
+            return
+        response = "🔎 **Похожие документы:**\n\n"
+        for i, doc in enumerate(results, 1):
+            response += f"{i}. **ID:** {doc['doc_id']}\n"
+            response += f"   {doc.get('doc_type', '')} | {doc.get('counterparty', '')} | {doc.get('doc_number', '')}\n"
+            response += f"   Сходство: {doc['distance']:.4f}\n"
+            response += f"   Фрагмент: {doc['text'][:100]}...\n\n"
+        await message.reply(response, parse_mode="Markdown")
+    except Exception as e:
+        await message.reply(f"❌ Ошибка поиска: {e}")
 
 async def setup_processor():
     """Настройка и запуск процессора документов"""
