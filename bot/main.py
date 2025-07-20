@@ -1,12 +1,8 @@
 import logging
-logging.basicConfig(level=logging.INFO)
-
 import os
 import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
-from aiogram.utils import executor
-from aiogram.dispatcher.filters import ContentTypeFilter
 from dotenv import load_dotenv
 
 from storage import storage
@@ -15,66 +11,54 @@ from validator import validator
 from document_processor import processor
 from rag import rag_index
 
-# Загрузка токена из .env (создайте .env с TELEGRAM_TOKEN=...)
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Создаём экземпляр аналитики
 analytics = Analytics()
-
-# Папка для временного хранения документов
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
-# Разрешённые расширения
 ALLOWED_EXTENSIONS = {"pdf", "jpg", "jpeg", "docx", "xlsx", "zip"}
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# Callback для уведомлений от процессора
 async def notification_callback(user_id: int, message: str):
-    """Отправляет уведомления пользователю"""
     try:
         await bot.send_message(user_id, message, parse_mode="Markdown")
     except Exception as e:
         logging.error(f"Ошибка отправки уведомления пользователю {user_id}: {e}")
 
-@dp.message_handler(content_types=types.ContentType.DOCUMENT)
+@dp.message()
 async def handle_document(message: Message):
+    if message.content_type != types.ContentType.DOCUMENT:
+        return
     document = message.document
     filename = document.file_name
-    
     if not allowed_file(filename):
         await message.reply("❌ Недопустимый тип файла. Разрешены: PDF, JPG, DOCX, XLSX, ZIP.")
         return
-    
     file_path = os.path.join(TEMP_DIR, filename)
     await document.download(destination_file=file_path)
-    
-    # Добавляем задачу в асинхронный процессор
     task_id = await processor.add_task(message.from_user.id, filename, file_path)
-    
     await message.reply(f"✅ Документ '{filename}' получен и добавлен в очередь обработки (ID: {task_id[:8]})")
 
-@dp.message_handler(content_types=types.ContentType.PHOTO)
+@dp.message()
 async def handle_photo(message: Message):
-    # Сохраняем самое большое фото
+    if message.content_type != types.ContentType.PHOTO:
+        return
     photo = message.photo[-1]
     file_id = photo.file_id
     filename = f"photo_{file_id}.jpg"
     file_path = os.path.join(TEMP_DIR, filename)
     await photo.download(destination_file=file_path)
-    
-    # Добавляем задачу в асинхронный процессор
     task_id = await processor.add_task(message.from_user.id, filename, file_path)
-    
     await message.reply(f"✅ Фото получено и добавлено в очередь обработки (ID: {task_id[:8]})")
 
-@dp.message_handler(commands=["start", "help"])
+@dp.message(commands=["start", "help"])
 async def send_welcome(message: Message):
     help_text = """
 🤖 **Документ-бот** - автоматическая обработка документов
@@ -94,6 +78,7 @@ async def send_welcome(message: Message):
 🔧 `/validate <текст>` - проверить валидацию данных
 🔧 `/tasks` - мои задачи обработки
 🔧 `/task <id>` - статус конкретной задачи
+🔧 `/find <текст>` - семантический поиск по базе
 
 **Примеры:**
 `/report ООО Рога и Копыта`
@@ -105,7 +90,7 @@ async def send_welcome(message: Message):
     """
     await message.reply(help_text, parse_mode="Markdown")
 
-@dp.message_handler(commands=["report"])
+@dp.message(commands=["report"])
 async def handle_report(message: Message):
     """Обработчик команды отчёта по контрагентам"""
     try:
@@ -158,7 +143,7 @@ async def handle_report(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при формировании отчёта: {e}")
 
-@dp.message_handler(commands=["unclosed"])
+@dp.message(commands=["unclosed"])
 async def handle_unclosed(message: Message):
     """Обработчик команды незакрытых цепочек"""
     try:
@@ -188,7 +173,7 @@ async def handle_unclosed(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при формировании отчёта: {e}")
 
-@dp.message_handler(commands=["monthly"])
+@dp.message(commands=["monthly"])
 async def handle_monthly(message: Message):
     """Обработчик команды месячного отчёта"""
     try:
@@ -220,7 +205,7 @@ async def handle_monthly(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при формировании отчёта: {e}")
 
-@dp.message_handler(commands=["chain"])
+@dp.message(commands=["chain"])
 async def handle_chain(message: Message):
     """Обработчик команды деталей цепочки"""
     try:
@@ -254,7 +239,7 @@ async def handle_chain(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении деталей цепочки: {e}")
 
-@dp.message_handler(commands=["status"])
+@dp.message(commands=["status"])
 async def handle_status(message: Message):
     """Обработчик команды статуса системы"""
     try:
@@ -309,7 +294,7 @@ async def handle_status(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении статуса: {e}")
 
-@dp.message_handler(commands=["validate"])
+@dp.message(commands=["validate"])
 async def handle_validate(message: Message):
     """Обработчик команды валидации данных"""
     try:
@@ -352,7 +337,7 @@ async def handle_validate(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при валидации: {e}")
 
-@dp.message_handler(commands=["tasks"])
+@dp.message(commands=["tasks"])
 async def handle_tasks(message: Message):
     """Обработчик команды списка задач пользователя"""
     try:
@@ -392,7 +377,7 @@ async def handle_tasks(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении списка задач: {e}")
 
-@dp.message_handler(commands=["task"])
+@dp.message(commands=["task"])
 async def handle_task_status(message: Message):
     """Обработчик команды статуса конкретной задачи"""
     try:
@@ -469,7 +454,7 @@ async def handle_task_status(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении статуса задачи: {e}")
 
-@dp.message_handler(commands=["find"])
+@dp.message(commands=["find"])
 async def handle_find(message: Message):
     query = message.get_args().strip()
     if not query:
@@ -500,14 +485,10 @@ async def setup_processor():
     
     logging.info("DocumentProcessor настроен и запущен")
 
-def main():
-    loop = asyncio.get_event_loop()
-    
-    # Запускаем процессор
-    loop.create_task(setup_processor())
-    
-    # Запускаем бота
-    executor.start_polling(dp, skip_updates=True, loop=loop)
+async def main():
+    await setup_processor()
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
-    main() 
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main()) 
