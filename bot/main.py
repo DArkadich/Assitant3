@@ -4,6 +4,7 @@ import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from dotenv import load_dotenv
+from aiogram.filters import Command
 
 from storage import storage
 from analytics import Analytics
@@ -58,7 +59,7 @@ async def handle_photo(message: Message):
     task_id = await processor.add_task(message.from_user.id, filename, file_path)
     await message.reply(f"✅ Фото получено и добавлено в очередь обработки (ID: {task_id[:8]})")
 
-@dp.message(commands=["start", "help"])
+@dp.message(Command("start", "help"))
 async def send_welcome(message: Message):
     help_text = """
 🤖 **Документ-бот** - автоматическая обработка документов
@@ -90,7 +91,7 @@ async def send_welcome(message: Message):
     """
     await message.reply(help_text, parse_mode="Markdown")
 
-@dp.message(commands=["report"])
+@dp.message(Command("report"))
 async def handle_report(message: Message):
     """Обработчик команды отчёта по контрагентам"""
     try:
@@ -143,7 +144,7 @@ async def handle_report(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при формировании отчёта: {e}")
 
-@dp.message(commands=["unclosed"])
+@dp.message(Command("unclosed"))
 async def handle_unclosed(message: Message):
     """Обработчик команды незакрытых цепочек"""
     try:
@@ -173,7 +174,7 @@ async def handle_unclosed(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при формировании отчёта: {e}")
 
-@dp.message(commands=["monthly"])
+@dp.message(Command("monthly"))
 async def handle_monthly(message: Message):
     """Обработчик команды месячного отчёта"""
     try:
@@ -205,7 +206,7 @@ async def handle_monthly(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при формировании отчёта: {e}")
 
-@dp.message(commands=["chain"])
+@dp.message(Command("chain"))
 async def handle_chain(message: Message):
     """Обработчик команды деталей цепочки"""
     try:
@@ -239,7 +240,7 @@ async def handle_chain(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении деталей цепочки: {e}")
 
-@dp.message(commands=["status"])
+@dp.message(Command("status"))
 async def handle_status(message: Message):
     """Обработчик команды статуса системы"""
     try:
@@ -294,7 +295,7 @@ async def handle_status(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении статуса: {e}")
 
-@dp.message(commands=["validate"])
+@dp.message(Command("validate"))
 async def handle_validate(message: Message):
     """Обработчик команды валидации данных"""
     try:
@@ -337,7 +338,7 @@ async def handle_validate(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при валидации: {e}")
 
-@dp.message(commands=["tasks"])
+@dp.message(Command("tasks"))
 async def handle_tasks(message: Message):
     """Обработчик команды списка задач пользователя"""
     try:
@@ -377,7 +378,7 @@ async def handle_tasks(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении списка задач: {e}")
 
-@dp.message(commands=["task"])
+@dp.message(Command("task"))
 async def handle_task_status(message: Message):
     """Обработчик команды статуса конкретной задачи"""
     try:
@@ -454,7 +455,7 @@ async def handle_task_status(message: Message):
     except Exception as e:
         await message.reply(f"❌ Ошибка при получении статуса задачи: {e}")
 
-@dp.message(commands=["find"])
+@dp.message(Command("find"))
 async def handle_find(message: Message):
     query = message.get_args().strip()
     if not query:
