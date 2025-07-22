@@ -8,7 +8,7 @@ peewee
 python-dotenv
 Pillow
 opencv-python
-numpy
+numpy<2.0
 pandas
 openpyxl
 psycopg2-binary
