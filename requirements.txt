@@ -12,7 +12,7 @@ numpy
 pandas
 openpyxl
 psycopg2-binary
-requests 
+requests
 sentence-transformers
 faiss-cpu
-torch 
+torch==2.2.2+cpu --find-links https://download.pytorch.org/whl/torch_stable.html 
