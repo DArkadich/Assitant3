@@ -188,6 +188,8 @@ class DocumentProcessor:
 
             # Явно определяем тип документа
             doc_type = classify_document_universal(text)
+            if self.notification_callback:
+                await self.notification_callback(task.user_id, f"Определён тип документа: <b>{doc_type}</b>")
 
             # Извлекаем поля, передаём doc_type для контекстного поиска даты и других полей
             rag_results = get_rag_index().search(text, top_k=3)
