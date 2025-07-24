@@ -1,6 +1,6 @@
 import asyncio
 import os
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from aiogram.filters import Command
 
@@ -53,6 +53,14 @@ async def main():
     @dp.message(Command("find"))
     async def handle_find(message: Message):
         await message.answer("Здесь будет семантический поиск.")
+
+    # --- Новый этап: обработка документов и фото ---
+    @dp.message()
+    async def handle_document(message: Message):
+        if message.content_type == types.ContentType.DOCUMENT:
+            await message.answer("Документ получен!")
+        elif message.content_type == types.ContentType.PHOTO:
+            await message.answer("Фото получено!")
 
     await dp.start_polling(bot)
 
