@@ -321,7 +321,7 @@ class DocumentProcessor:
             if task.status == ProcessingStatus.COMPLETED:
                 processing_time = (task.completed_at - start_time).total_seconds()
                 total_processed = self.stats['total_processed']
-                current_avg = self.stats['average_processing_time']
+                current_avg = float(self.stats['average_processing_time'])
                 self.stats['average_processing_time'] = (current_avg * (total_processed - 1) + processing_time) / total_processed
     
     def get_stats(self) -> Dict:
