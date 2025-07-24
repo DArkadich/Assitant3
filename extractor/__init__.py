@@ -255,6 +255,21 @@ def determine_company_role(text: str) -> str:
         logging.error(f"Error determining company role: {e}")
         return "не указана"
 
+def is_suspicious(value, field):
+    if not value or value == "-":
+        return True
+    if field == "amount":
+        try:
+            return float(value.replace(',', '.').replace(' ', '')) < 10
+        except:
+            return True
+    if field == "doc_number":
+        return len(value.strip()) < 3
+    if field == "date":
+        # Можно добавить проверку на слишком старую/будущую дату
+        return False
+    return False
+
 # --- Быстрый путь для извлечения ключевых полей ---
 def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None, doc_type: Optional[str] = None) -> dict:
     """
@@ -357,7 +372,8 @@ def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None, 
                 break
     # Если хотя бы 3 поля найдены — считаем быстрый путь успешным
     found_fields = sum(1 for v in [result["inn"], result["date"], result["amount"], result["doc_number"], result["counterparty"], result["contract_number"]] if v != "-")
-    if found_fields >= 3:
+    suspicious = any(is_suspicious(result[f], f) for f in ["amount", "doc_number", "date"])
+    if found_fields >= 3 and not suspicious:
         return result
 
     # --- Медленный путь: LLM ---
