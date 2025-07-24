@@ -244,25 +244,54 @@ def determine_company_role(text: str) -> str:
         return "не указана"
 
 # --- Быстрый путь для извлечения ключевых полей ---
-def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None) -> dict:
+def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None, doc_type: Optional[str] = None) -> dict:
     """
     Сначала пытаемся извлечь ключевые поля регулярками/паттернами (быстрый путь).
     Если не удалось — используем LLM (медленный путь).
+    doc_type: если передан, используется для контекстного поиска даты и других полей
     """
     import re
     clean = clean_text(doc_text)
     total_len = len(clean)
     result = {k: "-" for k in ["inn", "counterparty", "doc_number", "date", "amount", "subject", "contract_number"]}
 
+    # --- Контекстный поиск даты ---
+    date_patterns = [r"\b\d{2}[./]\d{2}[./]\d{4}\b", r"\b\d{2} [а-я]+ \d{4}\b"]
+    date_candidates = []
+    for pat in date_patterns:
+        for m in re.finditer(pat, clean):
+            date_candidates.append((m.start(), m.group(0)))
+    # Если есть doc_type, ищем дату рядом с ключевым словом
+    if doc_type and date_candidates:
+        doc_type_keywords = {
+            "акт": ["акт", "акта"],
+            "договор": ["договор", "contract"],
+            "счёт": ["счёт", "счет", "invoice"],
+            "упд": ["упд", "универсальный передаточный"],
+            "накладная": ["накладная"]
+        }
+        keywords = doc_type_keywords.get(doc_type.lower(), [])
+        best = None
+        best_dist = 99999
+        for kw in keywords:
+            for m in re.finditer(kw, clean.lower()):
+                kw_pos = m.start()
+                for date_pos, date_val in date_candidates:
+                    dist = abs(date_pos - kw_pos)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best = date_val
+        if best:
+            result["date"] = best
+        else:
+            result["date"] = date_candidates[0][1]
+    elif date_candidates:
+        result["date"] = date_candidates[0][1]
     # Быстрый путь: регулярки для ИНН, даты, суммы, номера документа
     # ИНН (10 или 12 цифр)
     inn_match = re.search(r"\b\d{10}\b|\b\d{12}\b", clean)
     if inn_match:
         result["inn"] = inn_match.group(0)
-    # Дата (форматы: 23.06.2025, 23/06/2025, 23 июня 2025)
-    date_match = re.search(r"\b\d{2}[./]\d{2}[./]\d{4}\b|\b\d{2} [а-я]+ \d{4}\b", clean)
-    if date_match:
-        result["date"] = date_match.group(0)
     # Сумма (форматы: 1 234 567,89 руб., 1234567.89)
     amount_match = re.search(r"\b\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{2})?\b", clean)
     if amount_match:

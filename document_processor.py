@@ -185,18 +185,18 @@ class DocumentProcessor:
             text = process_file_with_classification(task.file_path)
             if not text:
                 raise Exception("Не удалось извлечь текст из документа")
-            
-            # Определяем тип документа
+
+            # Явно определяем тип документа
             doc_type = classify_document_universal(text)
-            
-            # Извлекаем поля
+
+            # Извлекаем поля, передаём doc_type для контекстного поиска даты и других полей
             rag_results = get_rag_index().search(text, top_k=3)
             rag_context = [doc['text'] for doc in rag_results]
-            fields = extract_fields_from_text(text, rag_context=rag_context)
-            
+            fields = extract_fields_from_text(text, rag_context=rag_context, doc_type=doc_type) if 'doc_type' in extract_fields_from_text.__code__.co_varnames else extract_fields_from_text(text, rag_context=rag_context)
+
             if not fields:
                 raise Exception("Не удалось извлечь ключевые поля из документа")
-            
+
             # Добавляем тип документа и упорядочиваем поля
             fields['doc_type'] = doc_type
             ordered_fields = {
@@ -209,9 +209,9 @@ class DocumentProcessor:
                 'subject': fields['subject'],
                 'contract_number': fields['contract_number']
             }
-            
-            # Валидируем данные
-            is_valid, errors, warnings = validator.validate_document_data(ordered_fields)
+
+            # Валидируем данные с учётом типа документа
+            is_valid, errors, warnings = validator.validate_document_data(ordered_fields, doc_type=doc_type)
             task.validation_errors = errors
             task.validation_warnings = warnings
             
