@@ -5,11 +5,16 @@ from aiogram.types import Message
 from aiogram.filters import Command
 
 async def main():
-    bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
+    token = os.getenv("TELEGRAM_TOKEN")
+    print("TELEGRAM_TOKEN:", token)
+    bot = Bot(token=token)
     dp = Dispatcher()
+
     @dp.message(Command("start"))
     async def start_handler(message: Message):
-        await message.answer("Минимальный бот внутри контейнера работает!")
+        await message.answer("Минимальный бот работает!")
+
+    print("Starting polling...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
