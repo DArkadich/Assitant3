@@ -238,7 +238,7 @@ class PostgresStorage:
         if existing:
             # Обновляем существующего
             doc_count = existing[2] + 1
-            total_amount = existing[1] + (amount or 0)
+            total_amount = float(existing[1]) + float(amount or 0)
             cursor.execute('''
                 UPDATE counterparties 
                 SET total_amount = %s, document_count = %s, last_document_date = %s
