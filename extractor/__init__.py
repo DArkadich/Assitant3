@@ -151,11 +151,9 @@ def extract_text_from_jpg(file_path):
         logging.error(traceback.format_exc())
         return ""
 
-# --- Универсальная эвристика + LLM для классификации ---
+# --- Универсальная эвристика для классификации типа документа ---
 def classify_document_universal(text: str) -> str:
-    # Расширенная эвристика: ищем по всему тексту, а не только по первым строкам
     text_lower = text.lower()
-    # Ключевые слова и регулярки для разных типов документов
     if "упд" in text_lower or "универсальный передаточный" in text_lower:
         return "упд"
     if "акт" in text_lower:
@@ -182,8 +180,22 @@ def classify_document_universal(text: str) -> str:
         return "накладная"
     if re.search(r"\bупд\b", text_lower):
         return "упд"
-    # Если ничего не найдено — fallback на LLM
-    return classify_document_llm(text)
+    return "иной"
+
+# --- Список нужных полей для каждого типа документа ---
+def get_fields_for_doc_type(doc_type: str):
+    doc_type = (doc_type or "").lower()
+    if doc_type == "акт":
+        return ["counterparty", "date", "amount", "doc_number"]
+    if doc_type == "договор":
+        return ["counterparty", "date", "doc_number"]
+    if doc_type == "счёт":
+        return ["counterparty", "date", "amount", "doc_number"]
+    if doc_type == "упд":
+        return ["counterparty", "date", "amount", "doc_number", "inn"]
+    if doc_type == "накладная":
+        return ["counterparty", "date", "amount", "doc_number"]
+    return ["counterparty", "date", "amount", "doc_number", "inn", "contract_number"]
 
 # --- Универсальная функция для bot/main.py ---
 def process_file_with_classification(file_path):
@@ -359,14 +371,24 @@ def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None, 
         for i, frag in enumerate(rag_context, 1):
             rag_block += f"Пример {i}:\n{frag}\n\n"
         rag_block += "----\n"
+    # Формируем список нужных полей
+    fields_needed = get_fields_for_doc_type(doc_type)
+    fields_list = "\n- " + "\n- ".join(fields_needed)
+    # Формируем prompt
+    prompt = f"""
+{rag_block}Это документ типа: {doc_type or '-'}.
+Извлеки только следующие поля:{fields_list}
+Верни результат в формате JSON с ключами: {', '.join(fields_needed)}.
+Текст документа:
+"""
     windows = 0
     i = 0
     while i < total_len and windows < 10:
         window_text = clean[i:i+MAX_CHARS]
-        prompt = rag_block + EXTRACTION_PROMPT_TEMPLATE.format(text=window_text, our_company=OUR_COMPANY, our_role=our_role)
-        logging.info(f"Prompt to LLM (window {windows+1}, chars {i}-{i+MAX_CHARS}): {prompt[:200]}...")
+        full_prompt = prompt + f'"{window_text}"'
+        logging.info(f"Prompt to LLM (window {windows+1}, chars {i}-{i+MAX_CHARS}): {full_prompt[:200]}...")
         try:
-            response = query_ollama(prompt)
+            response = query_ollama(full_prompt)
             start = response.find('{')
             end = response.rfind('}') + 1
             if start == -1 or end == -1:
@@ -375,7 +397,7 @@ def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None, 
             json_str = response[start:end]
             fields = json.loads(json_str)
             result = merge_fields(result, fields)
-            if all(result[k] and result[k] != "-" and result[k].lower() not in ("not specified", "none", "-") for k in result):
+            if all(result.get(k) and result[k] != "-" and result[k].lower() not in ("not specified", "none", "-") for k in fields_needed):
                 break
         except Exception as e:
             logging.error(f"Error querying Ollama LLM or parsing JSON: {e}")
