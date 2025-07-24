@@ -10,6 +10,9 @@ from validator import validator
 from document_processor import processor
 from rag import get_rag_index
 
+TEMP_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "temp")
+os.makedirs(TEMP_DIR, exist_ok=True)
+
 async def main():
     bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
     dp = Dispatcher()
@@ -54,13 +57,24 @@ async def main():
     async def handle_find(message: Message):
         await message.answer("Здесь будет семантический поиск.")
 
-    # --- Новый этап: обработка документов и фото ---
+    # --- Этап: обработка документов и фото с постановкой в очередь ---
     @dp.message()
     async def handle_document(message: Message):
         if message.content_type == types.ContentType.DOCUMENT:
-            await message.answer("Документ получен!")
+            document = message.document
+            filename = document.file_name
+            file_path = os.path.join(TEMP_DIR, filename)
+            await document.download(destination_file=file_path)
+            task_id = await processor.add_task(message.from_user.id, filename, file_path)
+            await message.answer(f"Документ '{filename}' получен и добавлен в очередь обработки (ID: {task_id[:8]})")
         elif message.content_type == types.ContentType.PHOTO:
-            await message.answer("Фото получено!")
+            photo = message.photo[-1]
+            file_id = photo.file_id
+            filename = f"photo_{file_id}.jpg"
+            file_path = os.path.join(TEMP_DIR, filename)
+            await photo.download(destination_file=file_path)
+            task_id = await processor.add_task(message.from_user.id, filename, file_path)
+            await message.answer(f"Фото получено и добавлено в очередь обработки (ID: {task_id[:8]})")
 
     await dp.start_polling(bot)
 
