@@ -5,8 +5,8 @@ import re
 from io import BytesIO
 from typing import Optional
 
-MAX_CHARS = 3000  # Максимальная длина текста для LLM (увеличено для большего контекста)
-OVERLAP = 750     # Перекрытие между окнами (50%)
+MAX_CHARS = 2000  # Максимальная длина текста для LLM (уменьшено для ускорения)
+OVERLAP = 500     # Перекрытие между окнами (уменьшено)
 
 # --- Классификация типа документа через LLM ---
 # CLASSIFY_PROMPT_TEMPLATE теперь импортируется из ollama_client.py
