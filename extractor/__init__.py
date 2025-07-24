@@ -271,8 +271,51 @@ def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None) 
     docnum_match = re.search(r"№\s?\d+|N\s?\d+", clean)
     if docnum_match:
         result["doc_number"] = docnum_match.group(0)
+    # --- Новый быстрый путь: поиск counterparty ---
+    # Ищем строки с ключевыми словами и паттернами организаций
+    counterparty_patterns = [
+        r"(Общество с ограниченной ответственностью [\"'«][^\"'»]+[\"'»])",
+        r"(Акционерное общество [\"'«][^\"'»]+[\"'»])",
+        r"(Публичное акционерное общество [\"'«][^\"'»]+[\"'»])",
+        r"(Индивидуальный предприниматель [А-ЯЁ][а-яё]+ [А-ЯЁ][а-яё]+)",
+        r"(ООО\s+[\"'«][^\"'»]+[\"'»])",
+        r"(АО\s+[\"'«][^\"'»]+[\"'»])",
+        r"(ПАО\s+[\"'«][^\"'»]+[\"'»])",
+        r"(ИП\s+[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+)",
+        r"(Заказчик:?\s*.+)",
+        r"(Исполнитель:?\s*.+)",
+        r"(Поставщик:?\s*.+)",
+        r"(Получатель:?\s*.+)",
+        r"(Продавец:?\s*.+)",
+        r"(Покупатель:?\s*.+)",
+        r"(Контрагент:?\s*.+)"
+    ]
+    for pat in counterparty_patterns:
+        m = re.search(pat, clean)
+        if m:
+            val = m.group(1).strip()
+            # Обрезаем лишнее после запятой/скобки/конца строки
+            val = re.split(r'[\n\r,\(\)]', val)[0].strip()
+            if 3 < len(val) < 100:
+                result["counterparty"] = val
+                break
+    # --- Новый быстрый путь: поиск contract_number ---
+    contract_patterns = [
+        r"Договор\s*№\s*([A-Za-zА-Яа-я0-9\-_/]+)",
+        r"Contract\s*No\.?\s*([A-Za-zА-Яа-я0-9\-_/]+)",
+        r"Соглашение\s*№\s*([A-Za-zА-Яа-я0-9\-_/]+)",
+        r"№\s*([A-Za-zА-Яа-я0-9\-_/]+)",
+        r"N\s*([A-Za-zА-Яа-я0-9\-_/]+)"
+    ]
+    for pat in contract_patterns:
+        m = re.search(pat, clean)
+        if m:
+            val = m.group(1).strip()
+            if 2 < len(val) < 50:
+                result["contract_number"] = val
+                break
     # Если хотя бы 3 поля найдены — считаем быстрый путь успешным
-    found_fields = sum(1 for v in [result["inn"], result["date"], result["amount"], result["doc_number"]] if v != "-")
+    found_fields = sum(1 for v in [result["inn"], result["date"], result["amount"], result["doc_number"], result["counterparty"], result["contract_number"]] if v != "-")
     if found_fields >= 3:
         return result
 

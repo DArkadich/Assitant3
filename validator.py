@@ -146,14 +146,29 @@ class DocumentValidator:
         if not date:
             self.warnings.append("Дата не указана")
             return
-        
-        # Проверяем, что дата не в будущем
-        try:
-            # Парсим дату (упрощенно)
-            if re.search(r'202[5-9]', date):
-                self.warnings.append(f"Дата в будущем: {date}")
-        except:
-            pass
+
+        from datetime import datetime
+        parsed = None
+        # Попробуем распарсить дату в разных форматах
+        for fmt in ("%d.%m.%Y", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d", "%d %B %Y", "%d %b %Y", "%d %B %Y г.", "%d %b %Y г."):
+            try:
+                parsed = datetime.strptime(date.strip(), fmt)
+                break
+            except Exception:
+                continue
+        if not parsed:
+            # Попробуем парсинг русских месяцев
+            try:
+                import locale
+                locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+                parsed = datetime.strptime(date.strip(), "%d %B %Y")
+            except Exception:
+                self.warnings.append(f"Не удалось распознать дату: {date}")
+                return
+
+        today = datetime.now().date()
+        if parsed.date() > today:
+            self.warnings.append(f"Дата в будущем: {date}")
     
     def _validate_amount(self, amount: str):
         """Валидирует сумму"""
