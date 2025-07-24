@@ -3,6 +3,17 @@ import logging
 from typing import Dict, List, Tuple, Optional
 from datetime import datetime
 
+# Обязательные поля для разных типов документов
+REQUIRED_FIELDS = {
+    "акт": ["counterparty", "date", "amount"],
+    "договор": ["counterparty", "date", "doc_number"],
+    "счёт": ["counterparty", "date", "amount", "doc_number"],
+    "упд": ["counterparty", "date", "amount", "doc_number", "inn"],
+    "накладная": ["counterparty", "date", "amount", "doc_number"],
+    # По умолчанию — все поля обязательны
+    "default": ["counterparty", "date", "amount", "doc_number", "inn", "contract_number"]
+}
+
 class DocumentValidator:
     """Валидатор для проверки корректности извлеченных данных"""
     
@@ -10,7 +21,7 @@ class DocumentValidator:
         self.errors = []
         self.warnings = []
     
-    def validate_document_data(self, doc_data: Dict) -> Tuple[bool, List[str], List[str]]:
+    def validate_document_data(self, doc_data: Dict, doc_type: Optional[str] = None) -> Tuple[bool, List[str], List[str]]:
         """
         Валидирует данные документа
         
@@ -20,8 +31,12 @@ class DocumentValidator:
         self.errors = []
         self.warnings = []
         
-        # Валидация обязательных полей
-        self._validate_required_fields(doc_data)
+        # Определяем обязательные поля по типу документа
+        doc_type_key = (doc_type or doc_data.get("doc_type") or "default").lower()
+        required = REQUIRED_FIELDS.get(doc_type_key, REQUIRED_FIELDS["default"])
+        for field in required:
+            if not doc_data.get(field) or doc_data[field] == "-":
+                self.errors.append(f"Отсутствует обязательное поле: {field}")
         
         # Валидация типов документов
         self._validate_document_type(doc_data.get('doc_type'))
