@@ -13,8 +13,19 @@ from rag import get_rag_index
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+async def notification_callback(user_id: int, message: str):
+    try:
+        # bot должен быть доступен через глобальную область
+        await global_bot.send_message(user_id, message, parse_mode="Markdown")
+    except Exception as e:
+        print(f"Ошибка отправки уведомления: {e}")
+
+global_bot = None  # Глобальная переменная для доступа к боту из callback
+
 async def main():
+    global global_bot
     bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
+    global_bot = bot
     dp = Dispatcher()
 
     @dp.message(Command("start", "help"))
@@ -77,6 +88,10 @@ async def main():
             await bot.download(file, destination=file_path)
             task_id = await processor.add_task(message.from_user.id, filename, file_path)
             await message.answer(f"Фото получено и добавлено в очередь обработки (ID: {task_id[:8]})")
+
+    # --- Запуск процессора документов ---
+    processor.set_notification_callback(notification_callback)
+    await processor.start()
 
     await dp.start_polling(bot)
 
