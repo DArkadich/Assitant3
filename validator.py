@@ -37,29 +37,20 @@ class DocumentValidator:
         for field in required:
             if not doc_data.get(field) or doc_data[field] == "-":
                 self.errors.append(f"Отсутствует обязательное поле: {field}")
-        
-        # Валидация типов документов
-        self._validate_document_type(doc_data.get('doc_type'))
-        
-        # Валидация контрагента
+
+        # Валидируем только те поля, которые обязательны для этого типа документа
+        if "inn" in required:
+            self._validate_inn(doc_data.get('inn'))
+        if "doc_number" in required:
+            self._validate_doc_number(doc_data.get('doc_number'))
+        if "date" in required:
+            self._validate_date(doc_data.get('date'))
+        if "amount" in required:
+            self._validate_amount(doc_data.get('amount'))
+        if "contract_number" in required:
+            self._validate_contract_number(doc_data.get('contract_number'))
         self._validate_counterparty(doc_data.get('counterparty'))
-        
-        # Валидация ИНН
-        self._validate_inn(doc_data.get('inn'))
-        
-        # Валидация номера документа
-        self._validate_doc_number(doc_data.get('doc_number'))
-        
-        # Валидация даты
-        self._validate_date(doc_data.get('date'))
-        
-        # Валидация суммы
-        self._validate_amount(doc_data.get('amount'))
-        
-        # Валидация номера договора
-        self._validate_contract_number(doc_data.get('contract_number'))
-        
-        return len(self.errors) == 0, self.errors, self.warnings
+        return (len(self.errors) == 0, self.errors, self.warnings)
     
     def _validate_required_fields(self, doc_data: Dict):
         """Проверяет наличие обязательных полей"""
