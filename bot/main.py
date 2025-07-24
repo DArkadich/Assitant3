@@ -16,7 +16,7 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 async def notification_callback(user_id: int, message: str):
     try:
         # bot должен быть доступен через глобальную область
-        await global_bot.send_message(user_id, message, parse_mode="Markdown")
+        await global_bot.send_message(user_id, message, parse_mode="HTML")
     except Exception as e:
         print(f"Ошибка отправки уведомления: {e}")
 
