@@ -4,6 +4,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.filters import Command
 
+from storage import storage
+from analytics import Analytics
+from validator import validator
+from document_processor import processor
+from rag import rag_index
+
 async def main():
     bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
     dp = Dispatcher()
