@@ -90,7 +90,7 @@ class Analytics:
             'counterparty_filter': counterparty,
             'summary': {
                 'total_counterparties': len(results),
-                'total_amount': sum(r['total_amount'] for r in results),
+                'total_amount': sum(float(r['total_amount']) for r in results),
                 'total_documents': sum(r['document_count'] for r in results)
             },
             'counterparties': []
@@ -141,23 +141,23 @@ class Analytics:
             'generated_at': datetime.now().isoformat(),
             'summary': {
                 'total_unclosed_chains': len(results),
-                'total_remaining_amount': sum(r['remaining_amount'] for r in results),
-                'average_remaining_amount': sum(r['remaining_amount'] for r in results) / len(results) if results else 0,
+                'total_remaining_amount': sum(float(r['remaining_amount']) for r in results),
+                'average_remaining_amount': sum(float(r['remaining_amount']) for r in results) / len(results) if results else 0,
                 'oldest_chain_days': max(r['age_days'] for r in results) if results else 0,
                 'newest_chain_days': min(r['age_days'] for r in results) if results else 0
             },
             'by_age_category': {
                 'новые': {
                     'count': len([r for r in results if r['age_category'] == 'новые']),
-                    'amount': sum(r['remaining_amount'] for r in results if r['age_category'] == 'новые')
+                    'amount': sum(float(r['remaining_amount']) for r in results if r['age_category'] == 'новые')
                 },
                 'средние': {
                     'count': len([r for r in results if r['age_category'] == 'средние']),
-                    'amount': sum(r['remaining_amount'] for r in results if r['age_category'] == 'средние')
+                    'amount': sum(float(r['remaining_amount']) for r in results if r['age_category'] == 'средние')
                 },
                 'старые': {
                     'count': len([r for r in results if r['age_category'] == 'старые']),
-                    'amount': sum(r['remaining_amount'] for r in results if r['age_category'] == 'старые')
+                    'amount': sum(float(r['remaining_amount']) for r in results if r['age_category'] == 'старые')
                 }
             },
             'chains': []
