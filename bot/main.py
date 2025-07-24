@@ -8,7 +8,7 @@ from storage import storage
 from analytics import Analytics
 from validator import validator
 from document_processor import processor
-from rag import rag_index
+from rag import get_rag_index
 
 async def main():
     bot = Bot(token=os.getenv("TELEGRAM_TOKEN"))
