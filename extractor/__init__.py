@@ -153,34 +153,36 @@ def extract_text_from_jpg(file_path):
 
 # --- Универсальная эвристика + LLM для классификации ---
 def classify_document_universal(text: str) -> str:
-    first_lines = "\n".join(text.lower().splitlines()[:5])
-    logging.info(f"[Классификация] Первые 5 строк (lowercase): {first_lines}")
-    
-    # Приоритет: упд > акт > накладная > счёт-фактура > передаточный > счет > договор
-    if "упд" in first_lines or "универсальный передаточный" in first_lines:
-        logging.info(f"[Классификация] Найдено ключевое слово 'упд/универсальный передаточный' в первых строках, тип: упд")
+    # Расширенная эвристика: ищем по всему тексту, а не только по первым строкам
+    text_lower = text.lower()
+    # Ключевые слова и регулярки для разных типов документов
+    if "упд" in text_lower or "универсальный передаточный" in text_lower:
         return "упд"
-    if "акт" in first_lines:
-        logging.info(f"[Классификация] Найдено ключевое слово 'акт' в первых строках, тип: акт")
+    if "акт" in text_lower:
         return "акт"
-    if "накладная" in first_lines:
-        logging.info(f"[Классификация] Найдено ключевое слово 'накладная' в первых строках, тип: накладная")
+    if "накладная" in text_lower:
         return "накладная"
-    if "счёт-фактура" in first_lines or "счет-фактура" in first_lines:
-        logging.info(f"[Классификация] Найдено ключевое слово 'счёт-фактура' в первых строках, тип: счёт-фактура")
+    if "счёт-фактура" in text_lower or "счет-фактура" in text_lower:
         return "счёт-фактура"
-    if "передаточный" in first_lines:
-        logging.info(f"[Классификация] Найдено ключевое слово 'передаточный' в первых строках, тип: передаточный")
+    if "передаточный" in text_lower:
         return "передаточный"
-    if "счет" in first_lines or "счёт" in first_lines:
-        logging.info(f"[Классификация] Найдено ключевое слово 'счет/счёт' в первых строках, тип: счет")
+    if "счет" in text_lower or "счёт" in text_lower:
         return "счёт"
-    if "договор" in first_lines:
-        logging.info(f"[Классификация] Найдено ключевое слово 'договор' в первых строках, тип: договор")
+    if "договор" in text_lower:
         return "договор"
-    
-    logging.info(f"[Классификация] Ключевые слова не найдены, использую LLM")
-    # Если ничего не найдено — спрашиваем LLM
+    if "invoice" in text_lower:
+        return "счёт"
+    if "contract" in text_lower:
+        return "договор"
+    if re.search(r"\bакт[а-я]*\b", text_lower):
+        return "акт"
+    if re.search(r"\bдоговор[а-я]*\b", text_lower):
+        return "договор"
+    if re.search(r"\bнакладн[а-я]*\b", text_lower):
+        return "накладная"
+    if re.search(r"\bупд\b", text_lower):
+        return "упд"
+    # Если ничего не найдено — fallback на LLM
     return classify_document_llm(text)
 
 # --- Универсальная функция для bot/main.py ---
@@ -241,20 +243,43 @@ def determine_company_role(text: str) -> str:
         logging.error(f"Error determining company role: {e}")
         return "не указана"
 
+# --- Быстрый путь для извлечения ключевых полей ---
 def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None) -> dict:
     """
-    Извлекает ключевые поля из текста документа с помощью Ollama LLM (скользящее окно с overlap).
-    Возвращает dict с полями: inn, counterparty, doc_number, date, amount, subject, contract_number.
-    Если LLM не вернул корректный JSON, возвращает None.
-    rag_context: список фрагментов похожих документов для RAG (опционально, может быть None)
+    Сначала пытаемся извлечь ключевые поля регулярками/паттернами (быстрый путь).
+    Если не удалось — используем LLM (медленный путь).
     """
+    import re
     clean = clean_text(doc_text)
     total_len = len(clean)
     result = {k: "-" for k in ["inn", "counterparty", "doc_number", "date", "amount", "subject", "contract_number"]}
 
+    # Быстрый путь: регулярки для ИНН, даты, суммы, номера документа
+    # ИНН (10 или 12 цифр)
+    inn_match = re.search(r"\b\d{10}\b|\b\d{12}\b", clean)
+    if inn_match:
+        result["inn"] = inn_match.group(0)
+    # Дата (форматы: 23.06.2025, 23/06/2025, 23 июня 2025)
+    date_match = re.search(r"\b\d{2}[./]\d{2}[./]\d{4}\b|\b\d{2} [а-я]+ \d{4}\b", clean)
+    if date_match:
+        result["date"] = date_match.group(0)
+    # Сумма (форматы: 1 234 567,89 руб., 1234567.89)
+    amount_match = re.search(r"\b\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{2})?\b", clean)
+    if amount_match:
+        result["amount"] = amount_match.group(0)
+    # Номер документа (№123, № 123, N123)
+    docnum_match = re.search(r"№\s?\d+|N\s?\d+", clean)
+    if docnum_match:
+        result["doc_number"] = docnum_match.group(0)
+    # Если хотя бы 3 поля найдены — считаем быстрый путь успешным
+    found_fields = sum(1 for v in [result["inn"], result["date"], result["amount"], result["doc_number"]] if v != "-")
+    if found_fields >= 3:
+        return result
+
+    # --- Медленный путь: LLM ---
+    # (остальной код как раньше)
     # Сначала определяем роль нашей компании
     our_role = determine_company_role(clean[:MAX_CHARS])
-
     # Формируем RAG-контекст
     rag_block = ""
     if rag_context:
@@ -262,7 +287,6 @@ def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None) 
         for i, frag in enumerate(rag_context, 1):
             rag_block += f"Пример {i}:\n{frag}\n\n"
         rag_block += "----\n"
-
     windows = 0
     i = 0
     while i < total_len and windows < 10:
