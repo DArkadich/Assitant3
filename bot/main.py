@@ -64,7 +64,8 @@ async def main():
             document = message.document
             filename = document.file_name
             file_path = os.path.join(TEMP_DIR, filename)
-            await document.download(destination_file=file_path)
+            file = await bot.get_file(document.file_id)
+            await bot.download(file, destination=file_path)
             task_id = await processor.add_task(message.from_user.id, filename, file_path)
             await message.answer(f"Документ '{filename}' получен и добавлен в очередь обработки (ID: {task_id[:8]})")
         elif message.content_type == types.ContentType.PHOTO:
@@ -72,7 +73,8 @@ async def main():
             file_id = photo.file_id
             filename = f"photo_{file_id}.jpg"
             file_path = os.path.join(TEMP_DIR, filename)
-            await photo.download(destination_file=file_path)
+            file = await bot.get_file(photo.file_id)
+            await bot.download(file, destination=file_path)
             task_id = await processor.add_task(message.from_user.id, filename, file_path)
             await message.answer(f"Фото получено и добавлено в очередь обработки (ID: {task_id[:8]})")
 
