@@ -107,3 +107,5 @@ python export_reports.py --type monthly --year 2024 --month 12
 }
 ✅ Документ сохранён в базе (ID: 42)
 ``` 
+
+а так?

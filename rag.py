@@ -58,4 +58,11 @@ class RAGIndex:
                 results.append(entry)
         return results
 
-rag_index = RAGIndex() 
+# Ленивая инициализация singleton
+_rag_index = None
+
+def get_rag_index():
+    global _rag_index
+    if _rag_index is None:
+        _rag_index = RAGIndex()
+    return _rag_index 

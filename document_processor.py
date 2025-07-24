@@ -11,7 +11,7 @@ import json
 from extractor import extract_fields_from_text, process_file_with_classification, classify_document_universal
 from storage import storage
 from validator import validator
-from rag import rag_index
+from rag import get_rag_index
 
 class ProcessingStatus(Enum):
     """Статусы обработки документа"""
@@ -190,7 +190,7 @@ class DocumentProcessor:
             doc_type = classify_document_universal(text)
             
             # Извлекаем поля
-            rag_results = rag_index.search(text, top_k=3)
+            rag_results = get_rag_index().search(text, top_k=3)
             rag_context = [doc['text'] for doc in rag_results]
             fields = extract_fields_from_text(text, rag_context=rag_context)
             
@@ -241,7 +241,7 @@ class DocumentProcessor:
             # Индексируем документ
             try:
                 doc_text = " ".join(str(v) for v in ordered_fields.values() if v)
-                rag_index.add_document(str(doc_id), doc_text, meta=ordered_fields)
+                get_rag_index().add_document(str(doc_id), doc_text, meta=ordered_fields)
             except Exception as e:
                 logging.warning(f"RAG indexing failed: {e}")
             
