@@ -3,6 +3,7 @@ import json
 import logging
 import re
 from io import BytesIO
+from typing import Optional
 
 MAX_CHARS = 3000  # Максимальная длина текста для LLM (увеличено для большего контекста)
 OVERLAP = 750     # Перекрытие между окнами (50%)
@@ -240,24 +241,33 @@ def determine_company_role(text: str) -> str:
         logging.error(f"Error determining company role: {e}")
         return "не указана"
 
-def extract_fields_from_text(doc_text: str) -> dict:
+def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None) -> dict:
     """
     Извлекает ключевые поля из текста документа с помощью Ollama LLM (скользящее окно с overlap).
     Возвращает dict с полями: inn, counterparty, doc_number, date, amount, subject, contract_number.
     Если LLM не вернул корректный JSON, возвращает None.
+    rag_context: список фрагментов похожих документов для RAG (опционально, может быть None)
     """
     clean = clean_text(doc_text)
     total_len = len(clean)
     result = {k: "-" for k in ["inn", "counterparty", "doc_number", "date", "amount", "subject", "contract_number"]}
-    
+
     # Сначала определяем роль нашей компании
     our_role = determine_company_role(clean[:MAX_CHARS])
-    
+
+    # Формируем RAG-контекст
+    rag_block = ""
+    if rag_context:
+        rag_block += "Вот примеры похожих документов:\n"
+        for i, frag in enumerate(rag_context, 1):
+            rag_block += f"Пример {i}:\n{frag}\n\n"
+        rag_block += "----\n"
+
     windows = 0
     i = 0
     while i < total_len and windows < 10:
         window_text = clean[i:i+MAX_CHARS]
-        prompt = EXTRACTION_PROMPT_TEMPLATE.format(text=window_text, our_company=OUR_COMPANY, our_role=our_role)
+        prompt = rag_block + EXTRACTION_PROMPT_TEMPLATE.format(text=window_text, our_company=OUR_COMPANY, our_role=our_role)
         logging.info(f"Prompt to LLM (window {windows+1}, chars {i}-{i+MAX_CHARS}): {prompt[:200]}...")
         try:
             response = query_ollama(prompt)
