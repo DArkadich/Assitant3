@@ -13,12 +13,27 @@ from rag import get_rag_index
 TEMP_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "temp")
 os.makedirs(TEMP_DIR, exist_ok=True)
 
+def _escape_html(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+    )
+
 async def notification_callback(user_id: int, message: str):
     try:
-        # bot должен быть доступен через глобальную область
-        await global_bot.send_message(user_id, message, parse_mode="HTML")
+        # Безопасное HTML форматирование и разбиение на части до 3500 символов
+        safe = _escape_html(message)
+        chunk_size = 3500
+        for i in range(0, len(safe), chunk_size):
+            await global_bot.send_message(user_id, safe[i:i+chunk_size], parse_mode="HTML")
     except Exception as e:
-        print(f"Ошибка отправки уведомления: {e}")
+        try:
+            # Фоллбек: без parse_mode
+            for i in range(0, len(message), 3500):
+                await global_bot.send_message(user_id, message[i:i+3500])
+        except Exception as e2:
+            print(f"Ошибка отправки уведомления: {e}; fallback error: {e2}")
 
 global_bot = None  # Глобальная переменная для доступа к боту из callback
 

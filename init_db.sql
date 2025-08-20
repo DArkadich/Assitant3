@@ -144,3 +144,14 @@ COMMENT ON TABLE documents IS 'Таблица для хранения инфор
 COMMENT ON TABLE counterparties IS 'Таблица для хранения информации о контрагентах с агрегированной статистикой';
 COMMENT ON TABLE business_chains IS 'Таблица для хранения бизнес-цепочек (договор → счета → закрывающие документы)';
 COMMENT ON TABLE chain_links IS 'Таблица связей документов в бизнес-цепочках'; 
+
+-- Кэш ответов LLM для снижения задержек и стоимости
+CREATE TABLE IF NOT EXISTS llm_cache (
+    key TEXT PRIMARY KEY,
+    model TEXT NOT NULL,
+    prompt_hash TEXT NOT NULL,
+    response TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_cache_prompt_hash ON llm_cache(prompt_hash);

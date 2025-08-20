@@ -189,7 +189,7 @@ class DocumentProcessor:
             # Явно определяем тип документа
             doc_type = classify_document_universal(text)
             if self.notification_callback:
-                await self.notification_callback(task.user_id, f"Определён тип документа: <b>{doc_type}</b>")
+                await self.notification_callback(task.user_id, f"Определён тип документа: {doc_type}")
 
             # Извлекаем поля, передаём doc_type для контекстного поиска даты и других полей
             rag_results = get_rag_index().search(text, top_k=3)
@@ -224,14 +224,13 @@ class DocumentProcessor:
                 
                 # Уведомляем об ошибках валидации
                 if self.notification_callback:
-                    validation_message = f"❌ **Ошибки валидации документа '{task.filename}':**\n\n"
+                    validation_message = f"❌ Ошибки валидации документа '{task.filename}':\n\n"
                     for error in errors:
-                        validation_message += f"• {error}\n"
+                        validation_message += f"- {error}\n"
                     if warnings:
-                        validation_message += "\n⚠️ **Предупреждения:**\n"
+                        validation_message += "\n⚠️ Предупреждения:\n"
                         for warning in warnings:
-                            validation_message += f"• {warning}\n"
-                    
+                            validation_message += f"- {warning}\n"
                     await self.notification_callback(task.user_id, validation_message)
                 
                 self.stats['total_validation_failed'] += 1
@@ -259,23 +258,23 @@ class DocumentProcessor:
             # Уведомляем об успешном завершении
             if self.notification_callback:
                 success_message = f"""
-✅ **Документ '{task.filename}' успешно обработан!**
+✅ Документ '{task.filename}' успешно обработан!
 
-📄 **Извлеченные данные:**
-• Тип: {ordered_fields['doc_type']}
-• Контрагент: {ordered_fields['counterparty']}
-• Номер: {ordered_fields['doc_number']}
-• Сумма: {ordered_fields['amount']}
-• Дата: {ordered_fields['date']}
+Извлеченные данные:
+- Тип: {ordered_fields['doc_type']}
+- Контрагент: {ordered_fields['counterparty']}
+- Номер: {ordered_fields['doc_number']}
+- Сумма: {ordered_fields['amount']}
+- Дата: {ordered_fields['date']}
 
-🆔 **ID в базе:** {doc_id}
-⏱️ **Время обработки:** {(task.completed_at - start_time).total_seconds():.1f} сек
+ID в базе: {doc_id}
+Время обработки: {(task.completed_at - start_time).total_seconds():.1f} сек
                 """
                 
                 if warnings:
-                    success_message += "\n⚠️ **Предупреждения:**\n"
+                    success_message += "\n⚠️ Предупреждения:\n"
                     for warning in warnings:
-                        success_message += f"• {warning}\n"
+                        success_message += f"- {warning}\n"
                 
                 await self.notification_callback(task.user_id, success_message)
             
@@ -292,14 +291,14 @@ class DocumentProcessor:
             # Уведомляем об ошибке
             if self.notification_callback:
                 error_message = f"""
-❌ **Ошибка обработки документа '{task.filename}':**
+❌ Ошибка обработки документа '{task.filename}':
 
-🔧 **Причина:** {str(e)}
+Причина: {str(e)}
 
-💡 **Возможные решения:**
-• Проверьте качество изображения/PDF
-• Убедитесь, что документ читаемый
-• Попробуйте отправить документ позже
+Возможные решения:
+- Проверьте качество изображения/PDF
+- Убедитесь, что документ читаемый
+- Попробуйте отправить документ позже
                 """
                 
                 await self.notification_callback(task.user_id, error_message)

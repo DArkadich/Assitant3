@@ -260,11 +260,21 @@ def is_suspicious(value, field):
         return True
     if field == "amount":
         try:
-            return float(value.replace(',', '.').replace(' ', '')) < 10
-        except:
+            normalized = re.sub(r"[^0-9.,]", "", value)
+            normalized = normalized.replace(" ", "").replace("\xa0", " ")
+            # Если и точка, и запятая — считаем, что запятая разделяет копейки
+            if "," in normalized and "." in normalized:
+                # Убираем пробелы тысяч, оставляем запятую как десятичный
+                normalized = normalized.replace(".", "").replace(",", ".")
+            else:
+                normalized = normalized.replace(",", ".")
+            amount = float(normalized)
+            return amount < 10
+        except Exception:
             return True
     if field == "doc_number":
-        return len(value.strip()) < 3
+        token = value.strip()
+        return len(token) < 3 or not re.search(r"[0-9]", token)
     if field == "date":
         # Можно добавить проверку на слишком старую/будущую дату
         return False
@@ -282,7 +292,7 @@ def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None, 
     total_len = len(clean)
     result = {k: "-" for k in ["inn", "counterparty", "doc_number", "date", "amount", "subject", "contract_number"]}
 
-    # --- Контекстный поиск даты ---
+    # --- Контекстный поиск даты (prioritize "от" после типа/заголовка) ---
     date_patterns = [r"\b\d{2}[./]\d{2}[./]\d{4}\b", r"\b\d{2} [а-я]+ \d{4}\b"]
     date_candidates = []
     for pat in date_patterns:
@@ -316,17 +326,51 @@ def extract_fields_from_text(doc_text: str, rag_context: Optional[list] = None, 
         result["date"] = date_candidates[0][1]
     # Быстрый путь: регулярки для ИНН, даты, суммы, номера документа
     # ИНН (10 или 12 цифр)
-    inn_match = re.search(r"\b\d{10}\b|\b\d{12}\b", clean)
+    # Исключаем случайные 10-12-значные номера счёта/телефона, ищем рядом с ключами
+    inn_match = None
+    for m in re.finditer(r"\b\d{10}\b|\b\d{12}\b", clean):
+        left = max(0, m.start()-20)
+        ctx = clean[left:m.start()].lower()
+        if any(k in ctx for k in ["инн", "inn", "налогопл"]):
+            inn_match = m
+            break
     if inn_match:
         result["inn"] = inn_match.group(0)
-    # Сумма (форматы: 1 234 567,89 руб., 1234567.89)
-    amount_match = re.search(r"\b\d{1,3}(?:[\s.,]\d{3})*(?:[.,]\d{2})?\b", clean)
-    if amount_match:
-        result["amount"] = amount_match.group(0)
-    # Номер документа (№123, № 123, N123)
-    docnum_match = re.search(r"№\s?\d+|N\s?\d+", clean)
-    if docnum_match:
-        result["doc_number"] = docnum_match.group(0)
+    # Сумма: выбираем кандидата из строк с якорями
+    amount_candidates = []
+    for m in re.finditer(r"\b\d{1,3}(?:[\s\.\,]\d{3})*(?:[\.,]\d{2})?\b", clean):
+        # Окно вокруг числа
+        left = max(0, m.start()-30)
+        right = min(len(clean), m.end()+30)
+        ctx = clean[left:right].lower()
+        score = 0
+        if any(k in ctx for k in ["итого", "всего к оплате", "к оплате", "сумма к оплате", "amount due"]):
+            score += 3
+        if any(k in ctx for k in ["с ндс", "без ндс", "nds", "налог"]):
+            score += 1
+        # штраф, если рядом "шт", "кол-во"
+        if any(k in ctx for k in [" шт", "кол-во", "ед."]):
+            score -= 1
+        amount_candidates.append((score, m.group(0)))
+    if amount_candidates:
+        amount_candidates.sort(key=lambda x: x[0], reverse=True)
+        result["amount"] = amount_candidates[0][1]
+    # Номер документа: приоритет близко к символу № или словам "Счёт", "Акт", "Накладная"
+    docnum_candidates = []
+    # Варианты: "№ 123", "N123", после ключевых слов
+    for pat in [r"№\s*([A-Za-zА-Яа-я0-9\-_/]{3,})", r"\bN\s*([A-Za-zА-Яа-я0-9\-_/]{3,})"]:
+        for m in re.finditer(pat, clean):
+            docnum_candidates.append((2, m.group(1)))
+    for kw in ["счёт", "счет", "акт", "накладная", "упд", "invoice", "contract", "договор"]:
+        for m in re.finditer(kw, clean.lower()):
+            left = m.end()
+            tail = clean[left:left+30]
+            m2 = re.search(r"№\s*([A-Za-zА-Яа-я0-9\-_/]{3,})", tail)
+            if m2:
+                docnum_candidates.append((3, m2.group(1)))
+    if docnum_candidates:
+        docnum_candidates.sort(key=lambda x: x[0], reverse=True)
+        result["doc_number"] = docnum_candidates[0][1]
     # --- Новый быстрый путь: поиск counterparty ---
     # Ищем строки с ключевыми словами и паттернами организаций
     counterparty_patterns = [
